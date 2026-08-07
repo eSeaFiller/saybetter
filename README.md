@@ -65,7 +65,9 @@ npm run dist
 
 ## 更新
 
-应用每 6 小时（以及启动后 8 秒）静默查一次 GitHub Releases。有新版时菜单栏菜单顶部会多出一条「有新版本 x.y.z，点击下载」，设置页底部也会亮起。点一下打开 dmg 下载链接，手动拖进「应用程序」覆盖即可。
+应用每 6 小时（以及启动后 8 秒）静默查一次 `latest.json`。**跟安装包怎么拿到的无关**——飞书传的、AirDrop 的、U 盘拷的都一样，只要能上网就能收到更新提示。有新版时菜单栏菜单顶部会多出一条「有新版本 x.y.z，点击下载」，设置页底部也会亮起。点一下打开 dmg 下载链接，手动拖进「应用程序」覆盖即可。
+
+**为什么不查 GitHub API**：`api.github.com` 对匿名请求限 60 次/小时，且按出口 IP 计。公司网络下几百人共用一个出口 IP，额度早被别的工具用光（实测直接 403）。所以主用 `raw.githubusercontent.com` 上的 `latest.json`（CDN，无此限制），API 仅作兜底。
 
 **为什么不是静默自动更新**：macOS 上 electron-updater 依赖 Squirrel.Mac 校验代码签名，而本应用目前是 adhoc 签名（没有 Apple Developer ID，$99/年）。adhoc 包装不上更新，这是系统机制不是配置问题。等有了证书，把 `updater.js` 换成 electron-updater 即可，其余代码不用动。
 
@@ -78,3 +80,15 @@ xattr -dr com.apple.quarantine /Applications/SayBetter.app
 ## 思考模式
 
 DeepSeek v4 系列、豆包、通义默认开启思考模式，思维链会占掉 token 预算，严重时正文为空、响应也慢。应用会对这三家自动下发关闭参数（DeepSeek/方舟 `thinking:{type:"disabled"}`，通义 `enable_thinking:false`），其余服务商不下发，免得不认识的参数导致 400。
+
+## 发版
+
+```bash
+scripts/release.sh 0.2.9 "这一版改了什么"
+```
+
+脚本会依次：写版本号 → 自检打包白名单是否漏文件（`updater.js`、`preload-pill.js` 都曾漏过）→ 卸载残留的 dmg 卷 → 打包 → 用真实下载地址重写 `latest.json` → 提交推送 → 建 Release → 最后实测一次更新检查确认能查到这一版。
+
+## 程序坞
+
+应用保留程序坞图标，可以从程序坞/启动台打开，点图标即唤出面板，⌘Q 退出。（早期版本调用 `app.dock.hide()` 只留菜单栏图标，但打包后的托盘图标在部分环境不显示，用户就没有任何可见入口了。）
