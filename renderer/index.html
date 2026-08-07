@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self'; style-src 'self'; script-src 'self';" />
+  <title>SayBetter</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="panel">
+    <!-- 首次配置前的介绍 -->
+    <section id="view-intro" hidden>
+      <div id="intro-cover-page" class="intro-page">
+        <div class="intro-cover-content">
+          <img class="intro-welcome" src="welcome.png" alt="Welcome to SayBetter" />
+        </div>
+        <div class="intro-foot">
+          <button id="btn-intro-cover-next" class="primary intro-next">下一步 / Next</button>
+        </div>
+      </div>
+
+      <div id="intro-copy-page" class="intro-page" hidden>
+        <div class="intro-scroll">
+          <div class="intro-copy intro-zh">
+            <h1>你有没有经历过这样的时刻？</h1>
+            <p>讲外语时，明明已经组织好了句子，却还是忍不住怀疑：<strong>“我的语法正确吗？母语者真的会这样说吗？”</strong></p>
+            <p>即使使用母语，也常常会纠结：<strong>“这句话够正式吗？会不会表达得太直接？有没有更自然、更恰当的说法？”</strong></p>
+            <p>但当你正在编辑消息时，为了确认一句话是否正确，你可能需要打开浏览器、切换到 AI 工具、复制粘贴文本……这样的过程是不是有些繁琐？</p>
+            <p><strong>SayBetter</strong> 让表达优化变得更加简单。你只需要按下 <strong>Option + Space</strong>，或者任意你设置的快捷键，即可快速唤起应用。SayBetter 会自动读取你的剪切板内容，帮你检查语法、优化语气，并提供更自然、更合适的表达方式。</p>
+            <p>无论是学习外语、撰写邮件、工作沟通，还是日常聊天，SayBetter 都帮助你快速确认：</p>
+            <p class="intro-question"><strong>“这样说，对吗？”</strong></p>
+          </div>
+
+          <div class="intro-divider" aria-hidden="true"></div>
+
+          <div class="intro-copy intro-en">
+            <p>Have you ever found yourself speaking a foreign language and wondering, <strong>“Is my grammar correct? Would a native speaker actually say it this way?”</strong></p>
+            <p>Even in your native language, you may still hesitate: <strong>“Does this sound formal enough? Is it too blunt? Is there a clearer or more natural way to say it?”</strong></p>
+            <p>Normally, checking a sentence means opening a browser or switching to an AI app, pasting your text, and waiting for a response. When you are already writing a message, does that feel unnecessarily complicated?</p>
+            <p>With <strong>SayBetter</strong>, you can simply press <strong>Option + Space</strong>, or any shortcut you choose, to instantly open the app. SayBetter automatically reads the text from your clipboard, checks it for grammar and tone, and suggests a clearer, more natural way to express your meaning.</p>
+            <p>Whether you are learning a language, writing an email, communicating at work, or sending a message, SayBetter helps you answer one simple question:</p>
+            <p class="intro-question"><strong>Does this sound right?</strong></p>
+          </div>
+        </div>
+
+        <div class="intro-foot">
+          <button id="btn-intro-copy-next" class="primary intro-next">下一步 / Next</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 主界面 -->
+    <section id="view-main">
+      <div class="inputbar">
+        <span class="mark">？</span>
+        <textarea id="input" rows="1" data-i18n-placeholder="inputPlaceholder" spellcheck="false"></textarea>
+        <button id="btn-settings" class="icon" data-i18n-title="settings">⚙</button>
+      </div>
+
+      <div class="tones">
+        <button class="tone on" data-tone="default" data-i18n="defaultTone">默认</button>
+        <button class="tone" data-tone="formal" data-i18n="formalTone">正式</button>
+        <button class="tone" data-tone="casual" data-i18n="casualTone">口语</button>
+        <button class="tone" data-tone="concise" data-i18n="conciseTone">简洁</button>
+        <span class="spacer"></span>
+        <span id="status" class="status"></span>
+      </div>
+
+      <div id="result" class="result">
+        <div class="empty">
+          <p id="empty-line-1"></p>
+          <p id="empty-line-2" class="dim"></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 设置 -->
+    <section id="view-settings" hidden>
+      <div class="settings-head">
+        <h1 data-i18n="settings">设置</h1>
+        <button id="btn-back" class="icon" data-i18n-title="close">✕</button>
+      </div>
+      <label class="field">
+        <span data-i18n="language">语言</span>
+        <select id="f-language">
+          <option value="zh">中文</option>
+          <option value="en">English</option>
+          <option value="vi">Tiếng Việt</option>
+          <option value="id">Bahasa Indonesia</option>
+          <option value="th">ไทย</option>
+          <option value="ms">Bahasa Melayu</option>
+        </select>
+      </label>
+
+      <label class="field">
+        <span data-i18n="provider">服务商</span>
+        <select id="f-provider"></select>
+        <small id="hint-provider" class="dim"></small>
+      </label>
+
+      <label class="field">
+        <span data-i18n="baseUrl">API 地址</span>
+        <input id="f-baseurl" type="text" spellcheck="false" data-i18n-placeholder="baseUrlPlaceholder" />
+      </label>
+
+      <label class="field">
+        <span data-i18n="model">模型</span>
+        <input id="f-model" type="text" spellcheck="false" list="model-list" />
+        <datalist id="model-list"></datalist>
+      </label>
+
+      <label class="field">
+        <span data-i18n="apiKey">API Key</span>
+        <input id="f-key" type="password" spellcheck="false" data-i18n-placeholder="apiKeyPlaceholder" />
+      </label>
+
+      <label class="field field-check">
+        <input id="f-watch" type="checkbox" />
+        <span>
+          <span data-i18n="watchClipboard">监听复制，自动弹出浮窗</span>
+          <small id="watch-help" class="dim" data-i18n="watchHelp"></small>
+        </span>
+      </label>
+
+      <label class="field">
+        <span data-i18n="hotkey">全局快捷键</span>
+        <input id="f-hotkey" type="text" spellcheck="false" data-i18n-placeholder="hotkeyPlaceholder" />
+        <small id="hotkey-help" class="dim"></small>
+      </label>
+
+      <div class="field field-update">
+        <span id="update-line" class="dim"></span>
+        <button id="btn-check-update" class="secondary">检查更新</button>
+      </div>
+
+      <div class="settings-foot">
+        <span id="save-msg" class="dim"></span>
+        <button id="btn-replay-intro" class="secondary" data-i18n="viewIntro">查看介绍 / View introduction</button>
+        <button id="btn-save" class="primary" data-i18n="save">保存</button>
+      </div>
+    </section>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

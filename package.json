@@ -1,0 +1,35 @@
+{
+  "name": "saybetter",
+  "version": "0.2.6",
+  "description": "SayBetter — 菜单栏常驻的语法与表达检查小工具",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --mac"
+  },
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "dmg-license": "^1.0.11",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.local.saybetter",
+    "productName": "SayBetter",
+    "files": [
+      "main.js",
+      "preload.js",
+      "preload-pill.js",
+      "providers.js",
+      "renderer/**",
+      "iconTemplate.png",
+      "iconTemplate@2x.png"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "icon": "build/SayBetter.icns",
+      "target": "dmg"
+    }
+  }
+}

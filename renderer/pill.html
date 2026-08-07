@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self';" />
+  <title>SayBetter Pill</title>
+  <link rel="stylesheet" href="pill.css" />
+</head>
+<body>
+  <div id="pill" class="pill collapsed">
+    <!-- 收起态：一颗胶囊，只有状态点和一句话 -->
+    <div class="bar">
+      <span id="dot" class="dot"></span>
+      <span id="label" class="label">SayBetter</span>
+      <span id="peek" class="peek"></span>
+    </div>
+
+    <!-- 展开态：完整结果 -->
+    <div id="body" class="body">
+      <div id="content" class="content"></div>
+      <div class="foot">
+        <span id="hint" class="hint"></span>
+        <button id="btn-copy" class="copy"></button>
+        <button id="btn-close" class="copy close">✕</button>
+      </div>
+    </div>
+  </div>
+  <script src="pill.js"></script>
+</body>
+</html>
