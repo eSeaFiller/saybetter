@@ -547,7 +547,10 @@ ipcMain.on('pill:copy', (_e, t) => {
 /* ---------------- lifecycle ---------------- */
 
 app.whenReady().then(() => {
-  if (process.platform === 'darwin') app.dock.hide(); // 菜单栏常驻，不占 Dock
+  // 保留 Dock 图标：可以从程序坞打开，也让 ⌘Q 有个正经的退出入口。
+  // （早期版本这里是 app.dock.hide()，结果正式包里托盘图标又不显示，
+  //   用户就没有任何可见入口了。）
+  if (process.platform === 'darwin' && app.dock) app.dock.show();
   createWindow();
   setTimeout(() => {
     if (showOnLaunch && win && !win.isDestroyed()) {
@@ -575,6 +578,11 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {}); // 菜单栏常驻，关掉面板不等于退出
+
+// 点程序坞图标（或从启动台/访达打开已在运行的 app）→ 弹出面板
+app.on('activate', () => {
+  if (win && !win.isDestroyed()) showPanel();
+});
 app.on('before-quit', () => { isQuitting = true; });
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
