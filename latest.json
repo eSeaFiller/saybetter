@@ -1,5 +1,5 @@
 {
-  "version": "0.4.1",
-  "url": "https://github.com/eSeaFiller/saybetter/releases/download/v0.4.1/SayBetter-0.4.1-arm64.dmg",
-  "notes": "进度条移到灵动岛下沿，改为鼠标移上去之后才走（约1.5秒），走满展开结果；请求仍在复制时立即发出"
+  "version": "0.4.2",
+  "url": "https://github.com/eSeaFiller/saybetter/releases/download/v0.4.2/SayBetter-0.4.2-arm64.dmg",
+  "notes": "悬停进度条时长由 1.5 秒改为 1 秒"
 }

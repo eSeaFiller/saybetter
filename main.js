@@ -41,7 +41,7 @@ const PILL_EXPANDED_H = 380;
 const CLIPBOARD_POLL_MS = 400;
 // 鼠标移上来之后，灵动岛下沿走一条进度条；走满才展开结果。
 // 请求本身在复制时就已经发出去了，这段时间通常已经跑完，所以进度一到就有内容。
-const HOVER_DELAY_MS = 1500;
+const HOVER_DELAY_MS = 1000;
 const MAX_WATCH_CHARS = 1200; // 太长的复制（整篇文档、大段代码）不自动送去 API
 
 let tray = null;

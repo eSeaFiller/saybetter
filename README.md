@@ -20,7 +20,7 @@
 
 SayBetter 想去掉的就是这二十秒。
 
-它常驻在后台，监听你的剪贴板。你在任何地方选中文字按 `⌘C`，屏幕顶端刘海下方就会浮出一颗胶囊并立刻开始翻译。把鼠标移上去，胶囊下沿会走一条约 1.5 秒的进度条，走满就展开结果：
+它常驻在后台，监听你的剪贴板。你在任何地方选中文字按 `⌘C`，屏幕顶端刘海下方就会浮出一颗胶囊并立刻开始翻译。把鼠标移上去，胶囊下沿会走一条约 1 秒的进度条，走满就展开结果：
 
 - 复制的是中文或任何非英文，它翻译成英文，并保留你原话的语气和正式程度——原文直白就保持直白，原文客气就保持客气。
 - 复制的是英文，它检查语法、改得更地道。
@@ -33,7 +33,7 @@ SayBetter 想去掉的就是这二十秒。
 
 ### 功能
 
-- 复制即开始翻译，结果先在后台备好；鼠标移上去后灵动岛下沿走一条约 1.5 秒的进度条，走满才展开。
+- 复制即开始翻译，结果先在后台备好；鼠标移上去后灵动岛下沿走一条约 1 秒的进度条，走满才展开。
 - 只是路过不会展开，中途移开进度条会收回去。
 - 一次给出默认、专业、轻松、简洁四种表达，可分别复制。
 - 每种表达附带可展开的修改说明，标出改动的词和原因。
@@ -102,7 +102,7 @@ So you open a browser, switch to some AI tool, sign in, copy, paste, wait, and c
 
 SayBetter exists to remove those twenty seconds.
 
-It sits in the background watching your clipboard. Press `⌘C` anywhere and a pill drops down from the top of the screen and starts translating right away. Move the pointer onto it and a progress bar runs along its lower edge for about 1.5 seconds; when it fills, the result opens:
+It sits in the background watching your clipboard. Press `⌘C` anywhere and a pill drops down from the top of the screen and starts translating right away. Move the pointer onto it and a progress bar runs along its lower edge for about one second; when it fills, the result opens:
 
 - Copy Chinese, or any non-English text, and it translates into English while preserving your register — blunt stays blunt, warm stays warm.
 - Copy English and it corrects the grammar and makes it sound natural.
@@ -115,7 +115,7 @@ There is also a green dot in the menu bar. If the text is already on your clipbo
 
 ### Features
 
-- Copying starts the translation immediately and the result is prepared in the background; hovering runs a ~1.5s progress bar along the pill's lower edge, and the panel opens when it fills.
+- Copying starts the translation immediately and the result is prepared in the background; hovering runs a ~1s progress bar along the pill's lower edge, and the panel opens when it fills.
 - Merely passing by never opens it, and moving away mid-way retracts the bar.
 - Four registers at once — Default, Professional, Casual, Concise — each individually copyable.
 - Every version carries an expandable explanation naming the words that changed and why.
