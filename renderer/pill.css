@@ -144,26 +144,29 @@ html, body {
   text-align: right;
   color: var(--fg-3);
 }
-.pill.expanded .peek { display: none; }
+.pill.expanded .peek,
+.pill.expanded .progress { display: none; }
 
-/* 确定性进度条：2 秒走满，走满之前不显示结果。
-   收起态和展开态都要看得见 —— 展开时正在等，总得有个东西告诉你还要多久。 */
+/* 悬停进度条：贴在灵动岛下沿的一条细线。
+   鼠标移上来才出现并开始走，走满就展开结果；中途移开会收回去。 */
 .progress {
   flex: none;
-  height: 2px;
-  background: transparent;
+  height: 3px;
+  margin: 0 10px 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.10);
   overflow: hidden;
+  opacity: 0;
+  transition: opacity 160ms ease-out;
 }
-.pill.working .progress { background: rgba(106, 169, 255, 0.16); }
+.pill.dwelling .progress { opacity: 1; }
 .progress .fill {
   height: 100%;
   width: 0;
-  background: var(--accent);
-  border-radius: 0 1px 1px 0;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--accent), #9b8cff);
+  box-shadow: 0 0 8px rgba(106, 169, 255, 0.6);
 }
-/* 走满之后模型还没回来：原地做一次轻微呼吸，表示还在等 */
-.pill.waiting .progress .fill { animation: wait 1.2s ease-in-out infinite; }
-@keyframes wait { 50% { opacity: 0.45; } }
 
 /* ---- 展开态 ---- */
 
@@ -323,7 +326,7 @@ html, body {
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
 
-/* 进度走满之前不显示任何结果：正文、语气切换全部让位，只留一句等待提示 */
+/* 结果还没回来就展开了（模型比悬停还慢）：正文让位，只留一句提示 */
 .pill.working .tones,
 .pill.working .headline,
 .pill.working .source,

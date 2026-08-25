@@ -20,7 +20,7 @@
 
 SayBetter 想去掉的就是这二十秒。
 
-它常驻在后台，监听你的剪贴板。你在任何地方选中文字按 `⌘C`，屏幕顶端刘海下方就会浮出一颗胶囊——**这时它只是亮着，什么都还没发出去**。把鼠标移上去停一下，它才开始工作：
+它常驻在后台，监听你的剪贴板。你在任何地方选中文字按 `⌘C`，屏幕顶端刘海下方就会浮出一颗胶囊并立刻开始翻译。把鼠标移上去，胶囊下沿会走一条约 1.5 秒的进度条，走满就展开结果：
 
 - 复制的是中文或任何非英文，它翻译成英文，并保留你原话的语气和正式程度——原文直白就保持直白，原文客气就保持客气。
 - 复制的是英文，它检查语法、改得更地道。
@@ -33,15 +33,14 @@ SayBetter 想去掉的就是这二十秒。
 
 ### 功能
 
-- 复制即亮出，鼠标移上去停约 1.2 秒才真正开始翻译。**没移上去，文本一个字节都不会离开这台电脑。**
-- 不想动鼠标时，按全局快捷键（默认 `⌥Space`）或点菜单栏绿点即可立即翻译。
+- 复制即开始翻译，结果先在后台备好；鼠标移上去后灵动岛下沿走一条约 1.5 秒的进度条，走满才展开。
+- 只是路过不会展开，中途移开进度条会收回去。
 - 一次给出默认、专业、轻松、简洁四种表达，可分别复制。
 - 每种表达附带可展开的修改说明，标出改动的词和原因。
 - 非英文自动翻译为英文并保留原文语气；英文则做语法校对。
 - 浮窗出现在你正在使用的那块屏幕顶端，跟随切换桌面（Space）与全屏应用，且不抢占键盘焦点。
-- 鼠标停留约 1.2 秒才展开，只是路过不会被打断。
 - 展开后四种语气固定在顶部，无需滚动即可切换；正文字号随长度自适应。
-- 结果不逐字蹦出：顶部进度条走满 2 秒后一次性揭晓，每次节奏一致。
+- 结果不会在你没准备好时蹦出来：要等悬停进度条走满才展开，每次节奏一致。
 - 极光渐变与玻璃态：四条色带在玻璃后缓慢漂移（11–16 秒），前景是半透明玻璃卡片加高光描边，叠原生毛玻璃。
 - 顶部保留极光、正文区压深，最坏情况（白色桌面 + 最亮色带）下所有文字仍满足 WCAG 对比度。
 - 菜单栏常驻一颗绿点，点它即可用当前剪贴板内容触发一次；处理中会变成空心圈。
@@ -77,7 +76,7 @@ SayBetter 想去掉的就是这二十秒。
 ### 隐私
 
 - API Key 通过系统钥匙串加密后保存在本机 `~/Library/Application Support/SayBetter`。
-- **只有你把鼠标移入浮窗、或主动按快捷键/点绿点之后，文本才会发送给你配置的模型服务商。** 仅仅复制不会触发任何网络请求。
+- **开启「监听复制」后，你复制的内容会自动发送给你配置的那家模型服务商。** 复制密码、密钥等敏感内容前，请在设置中关闭该开关。
 - 应用不上传任何数据到作者处，不含分析、遥测或远程服务。
 - 少于 2 个字、超过 1200 字、纯网址、纯邮箱地址的内容会被自动跳过，不会发送。
 
@@ -103,7 +102,7 @@ So you open a browser, switch to some AI tool, sign in, copy, paste, wait, and c
 
 SayBetter exists to remove those twenty seconds.
 
-It sits in the background watching your clipboard. Press `⌘C` anywhere and a pill drops down from the top of the screen — **at this point it is merely lit; nothing has been sent anywhere**. Rest the pointer on it and only then does it start working:
+It sits in the background watching your clipboard. Press `⌘C` anywhere and a pill drops down from the top of the screen and starts translating right away. Move the pointer onto it and a progress bar runs along its lower edge for about 1.5 seconds; when it fills, the result opens:
 
 - Copy Chinese, or any non-English text, and it translates into English while preserving your register — blunt stays blunt, warm stays warm.
 - Copy English and it corrects the grammar and makes it sound natural.
@@ -116,15 +115,14 @@ There is also a green dot in the menu bar. If the text is already on your clipbo
 
 ### Features
 
-- Copying lights the pill; translation starts only after the pointer rests on it for about 1.2 seconds. **If you never hover, not one byte of the text leaves your machine.**
-- Prefer not to move the mouse? Press the global shortcut (`⌥Space`) or click the green menu-bar dot to translate immediately.
+- Copying starts the translation immediately and the result is prepared in the background; hovering runs a ~1.5s progress bar along the pill's lower edge, and the panel opens when it fills.
+- Merely passing by never opens it, and moving away mid-way retracts the bar.
 - Four registers at once — Default, Professional, Casual, Concise — each individually copyable.
 - Every version carries an expandable explanation naming the words that changed and why.
 - Non-English input is translated into English with the original tone preserved; English input is proofread.
 - The pill appears at the top of whichever display you are working on, follows you across Spaces and full-screen apps, and never steals keyboard focus.
-- It expands only after the pointer rests on it for about 1.2 seconds, so merely passing by never interrupts you.
 - The four registers stay pinned at the top — no scrolling needed to switch. Body text scales with length.
-- Results are not streamed word by word: a two-second progress bar fills first, then everything appears at once, so the rhythm is the same every time.
+- Results never appear before you are ready: the hover progress bar must fill first, so the rhythm is the same every time.
 - Aurora gradients behind glass: four colour bands drift slowly (11–16s) behind a translucent glass card with a highlight rim, on top of native macOS vibrancy.
 - The aurora stays near the top while the body area is darkened, so every piece of text still clears WCAG contrast even in the worst case (white desktop under the brightest band).
 - A green dot sits in the menu bar; click it to run on the current clipboard. It turns into a ring while working.
@@ -160,7 +158,7 @@ Repeat steps 2 and 3 after each update. Your settings are preserved.
 ### Privacy
 
 - The API key is encrypted with the system keychain and stored locally in `~/Library/Application Support/SayBetter`.
-- **Text is sent to your configured provider only after you hover the pill, press the shortcut, or click the green dot.** Copying alone triggers no network request.
+- **With clipboard watching enabled, everything you copy is sent automatically to the model provider you configured.** Turn the switch off in Settings before copying passwords or secrets.
 - The app uploads nothing to the author and contains no analytics, telemetry, or remote service.
 - Text shorter than 2 characters, longer than 1200 characters, or consisting solely of a URL or an email address is skipped and never sent.
 

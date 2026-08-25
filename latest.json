@@ -1,5 +1,5 @@
 {
-  "version": "0.4.0",
-  "url": "https://github.com/eSeaFiller/saybetter/releases/download/v0.4.0/SayBetter-0.4.0-arm64.dmg",
-  "notes": "改为悬停才翻译：复制只亮出浮窗不发请求，鼠标移入停留后才送出文本并跑真实进度条；不想动鼠标可用快捷键或菜单栏绿点立即触发"
+  "version": "0.4.1",
+  "url": "https://github.com/eSeaFiller/saybetter/releases/download/v0.4.1/SayBetter-0.4.1-arm64.dmg",
+  "notes": "进度条移到灵动岛下沿，改为鼠标移上去之后才走（约1.5秒），走满展开结果；请求仍在复制时立即发出"
 }

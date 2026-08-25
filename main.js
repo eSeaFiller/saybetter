@@ -35,11 +35,13 @@ const DEFAULT_CONFIG = {
 
 // 灵动岛浮窗尺寸
 const PILL_W = 260;
-const PILL_H = 34;
+const PILL_H = 40;  // 34 的文字行 + 下沿 6px 容纳悬停进度条
 const PILL_EXPANDED_W = 440;
 const PILL_EXPANDED_H = 380;
 const CLIPBOARD_POLL_MS = 400;
-const HOVER_DELAY_MS = 1200;    // 鼠标停留这么久才展开并开始翻译
+// 鼠标移上来之后，灵动岛下沿走一条进度条；走满才展开结果。
+// 请求本身在复制时就已经发出去了，这段时间通常已经跑完，所以进度一到就有内容。
+const HOVER_DELAY_MS = 1500;
 const MAX_WATCH_CHARS = 1200; // 太长的复制（整篇文档、大段代码）不自动送去 API
 
 let tray = null;
@@ -61,8 +63,6 @@ let selfWrote = ''; // 自己写进剪贴板的内容，不能再触发一轮
 let cursorTimer = null;
 let pillPinned = false; // 点过之后钉住，移开也不收
 let hoverTimer = null;  // 悬停计时：进入后要停够 HOVER_DELAY_MS 才展开
-let pendingText = '';   // 已经复制、但还没发给模型的文本
-let pendingMode = '';
 let updateInfo = null;  // 查到的新版本，null = 没有/没查到
 
 /* ---------------- config（key 用系统钥匙串加密后落盘） ---------------- */
@@ -208,13 +208,6 @@ function togglePanel() {
   // （PhrasePeek 是连按两次复制来实现同一件事，但那要读 NSPasteboard 的
   //   changeCount —— 复制同一段文字时内容没变，轮询式的剪贴板监听看不到，
   //   Electron 也没暴露这个接口，所以这里用快捷键代替。）
-  if (pendingText) {
-    pillPinned = true;          // 不是靠悬停触发的，得钉住，否则光标不在上面会立刻收起
-    pillSend('pill:pinned', true);
-    setPillExpanded(true);
-    firePending();
-    return;
-  }
   if (win && win.isVisible()) hidePanel();
   else showPanel();
 }
@@ -317,14 +310,18 @@ function startCursorWatch() {
     // 移开只收成胶囊，不隐藏 —— 结果得一直在那等着你。
     if (inside) {
       if (!pillExpanded && !hoverTimer) {
+        pillSend('pill:dwell', HOVER_DELAY_MS);   // 让界面开始画那条进度
         hoverTimer = setTimeout(() => {
           hoverTimer = null;
           setPillExpanded(true);
-          firePending(); // 停够了才发请求 —— 进度条从这一刻开始才有真东西可等
         }, HOVER_DELAY_MS);
       }
     } else {
-      if (hoverTimer) { clearTimeout(hoverTimer); hoverTimer = null; }
+      if (hoverTimer) {
+        clearTimeout(hoverTimer);
+        hoverTimer = null;
+        pillSend('pill:dwell-cancel');            // 中途移开就把进度收回去
+      }
       if (!pillPinned && pillExpanded) setPillExpanded(false);
     }
   }, 120);
@@ -337,7 +334,6 @@ function stopCursorWatch() {
 
 function hidePill() {
   if (hoverTimer) { clearTimeout(hoverTimer); hoverTimer = null; }
-  pendingText = '';
   pillExpanded = false;
   pillPinned = false;
   stopCursorWatch();
@@ -355,47 +351,18 @@ function detectMode(text) {
   return nonLatin > text.length * 0.15 ? 'translate' : 'proofread';
 }
 
-// 复制之后先只是「亮出来」，不发请求。
-// 文本要等到你真的把鼠标移上去（或连按两次复制）才会送出去 —— 这样既省钱，
-// 也意味着你随手复制的密码、密钥不会仅仅因为被复制过就上传。
-function armPill(text) {
-  if (!pillWin || pillWin.isDestroyed()) return;
-  const cfg = loadConfig();
-  if (pillAbort) { pillAbort.abort(); pillAbort = null; }
-
-  pendingText = text;
-  pendingMode = detectMode(text);
-  pillExpanded = false;
-  pillPinned = false;
-  pillSend('pill:expanded', false);
-  pillSend('pill:idle', { language: cfg.language || 'zh', mode: pendingMode });
-  pillWin.showInactive();
-  keepPillEverywhere();
-  positionPill(PILL_W, PILL_H);
-  startCursorWatch();
-}
-
-// 真正把文本送出去
-function firePending() {
-  if (!pendingText) return;
-  const text = pendingText;
-  pendingText = '';
-  runInPill(text);
-}
-
 async function runInPill(text) {
   const cfg = loadConfig();
   if (!pillWin || pillWin.isDestroyed()) return;
 
-  // 注意：这里不能重置展开状态。被悬停触发时面板正展开着，
-  // 一收就等于刚打开又关上。初始的收起态由 armPill 负责。
   pillSend('pill:start', { language: cfg.language || 'zh', mode: detectMode(text), source: text.slice(0, 300) });
   setTrayBusy(true);
-  if (!pillWin.isVisible()) {
-    pillWin.showInactive();
-    keepPillEverywhere();
-    positionPill(pillExpanded ? PILL_EXPANDED_W : PILL_W, pillExpanded ? PILL_EXPANDED_H : PILL_H);
-  }
+  pillExpanded = false;
+  pillPinned = false;
+  pillSend('pill:expanded', false);
+  pillWin.showInactive();
+  keepPillEverywhere();
+  positionPill(PILL_W, PILL_H);
   startCursorWatch();
 
   if (pillAbort) pillAbort.abort();
@@ -452,7 +419,7 @@ function startClipboardWatch() {
     lastClipboard = cur;
     if (!loadConfig().watchClipboard) return;
     if (!shouldWatch(cur)) return;
-    armPill(cur.trim());
+    runInPill(cur.trim());
   }, CLIPBOARD_POLL_MS);
 }
 
@@ -522,11 +489,7 @@ function buildTray() {
     const text = (clipboard.readText() || '').trim();
     if (shouldWatch(text)) {
       lastClipboard = clipboard.readText(); // 别让轮询紧接着再触发一次
-      armPill(text);
-      pillPinned = true;        // 同上：主动点绿点时鼠标在菜单栏，不在浮窗上
-      pillSend('pill:pinned', true);
-      setPillExpanded(true);
-      firePending();   // 主动点绿点就是明确要翻译，不用再等悬停
+      runInPill(text);
     } else {
       showPanel();
     }

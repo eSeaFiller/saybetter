@@ -17,10 +17,9 @@ const btnClose = $('#btn-close');
 const progressFill = $('#progress-fill');
 const waitingEl = $('#waiting');
 
-// 进度条跟真实请求走：先快后慢逼近 90%，请求真正完成时才补到 100%。
-// 不写死时长 —— 请求快就快、慢就诚实地慢下来，而不是假装在走。
-const PROGRESS_CREEP_MS = 2200; // 爬到 90% 大约用这么久
-const PROGRESS_FINISH_MS = 220; // 收尾补满的时长
+// 悬停进度：鼠标移上来之后，灵动岛下沿走一条进度；走满才展开结果。
+// 请求在复制那一刻就发出去了，所以这段时间通常已经把结果等回来了。
+let dwellTimer = null;
 
 let raw = '';
 let variants = [];   // [{ tone, text, why[] }]
@@ -28,9 +27,6 @@ let chosen = 0;
 let expanded = false;
 let pinned = false;
 let sourceText = '';
-let progressDone = false;  // 2 秒进度条是否走完
-let streamDone = false;    // 模型是否已经吐完
-let progressTimer = null;
 let t = (k) => k;
 
 const STRINGS = {
@@ -131,46 +127,24 @@ function renderWhy(lines) {
     .join('');
 }
 
-/* ---------------- 进度与揭晓 ---------------- */
+/* ---------------- 悬停进度 ---------------- */
 
-// 结果要等两件事都成立才显示：进度条走满 2 秒，且模型已经吐完。
-// 这样每次的节奏是一致的 —— 不会有时候瞬间蹦出来、有时候等半天。
-function maybeReveal() {
-  if (!progressDone || !streamDone) return;
-  pillEl.classList.remove('working', 'waiting');
-  dot.className = 'dot';
-  paint(false);
-}
-
-function startProgress() {
-  clearTimeout(progressTimer);
-  progressDone = false;
-  streamDone = false;
-
-  // 先归零并强制回流，否则 transition 不会从 0 开始跑
+function startDwell(ms) {
+  clearTimeout(dwellTimer);
+  pillEl.classList.add('dwelling');
   progressFill.style.transition = 'none';
   progressFill.style.width = '0%';
-  void progressFill.offsetWidth;
-  // ease-out：开头跑得快（让人立刻看到有反应），越接近 90% 越慢
-  progressFill.style.transition = `width ${PROGRESS_CREEP_MS}ms cubic-bezier(0.12, 0.8, 0.25, 1)`;
-  progressFill.style.width = '90%';
-
-  // 爬到头模型还没回来：原地呼吸，表示还在等而不是卡住
-  progressTimer = setTimeout(() => {
-    if (!streamDone) pillEl.classList.add('waiting');
-  }, PROGRESS_CREEP_MS);
+  void progressFill.offsetWidth;                  // 强制回流，否则不会从 0 开始跑
+  progressFill.style.transition = `width ${ms}ms linear`;
+  progressFill.style.width = '100%';
 }
 
-// 请求真的完成了：把进度补满，收尾动画走完再揭晓
-function finishProgress() {
-  clearTimeout(progressTimer);
-  pillEl.classList.remove('waiting');
-  progressFill.style.transition = `width ${PROGRESS_FINISH_MS}ms ease-out`;
-  progressFill.style.width = '100%';
-  progressTimer = setTimeout(() => {
-    progressDone = true;
-    maybeReveal();
-  }, PROGRESS_FINISH_MS);
+function cancelDwell() {
+  clearTimeout(dwellTimer);
+  // 中途移开：快速收回去，别停在半截上
+  progressFill.style.transition = 'width 180ms ease-out';
+  progressFill.style.width = '0%';
+  dwellTimer = setTimeout(() => pillEl.classList.remove('dwelling'), 180);
 }
 
 /* ---------------- 渲染 ---------------- */
@@ -251,28 +225,8 @@ window.pill.onPinned((v) => {
   hint.textContent = pinned ? t('pinned') : t('hint');
 });
 
-// 复制之后先待命：亮出方向标和一句提示，不发请求、不跑进度。
-window.pill.onIdle(({ language, mode }) => {
-  const s = STRINGS[language] || STRINGS.zh;
-  t = (k) => (s[k] !== undefined ? s[k] : k);
-  clearTimeout(progressTimer);
-  raw = ''; variants = []; chosen = 0; sourceText = '';
-  progressDone = streamDone = false;
-
-  directionEl.textContent = t(mode === 'proofread' ? 'proofread' : 'translate');
-  headline.innerHTML = ''; sourceEl.textContent = ''; tonesEl.innerHTML = '';
-  whyWrap.hidden = true;
-  peek.textContent = t('idle');
-  waitingEl.textContent = t('idle');
-  hint.textContent = t('hint');
-  btnCopy.textContent = t('copy');
-  dot.className = 'dot';
-  pillEl.classList.add('working');          // 结果区让位，只显示提示
-  pillEl.classList.remove('pinned', 'waiting');
-  progressFill.style.transition = 'none';
-  progressFill.style.width = '0%';
-  pinned = false;
-});
+window.pill.onDwell((ms) => startDwell(ms));
+window.pill.onDwellCancel(() => cancelDwell());
 
 window.pill.onStart(({ language, mode, source }) => {
   const s = STRINGS[language] || STRINGS.zh;
@@ -293,25 +247,22 @@ window.pill.onStart(({ language, mode, source }) => {
   btnCopy.textContent = t('copy');
   dot.className = 'dot working';
   pillEl.classList.add('working');
-  pillEl.classList.remove('pinned', 'waiting');
+  pillEl.classList.remove('pinned');
   pinned = false;
   waitingEl.textContent = t('working');
-  startProgress();
 });
 
-// 只累积不渲染：进度条走满之前一个字都不显示。
-window.pill.onDelta((d) => { raw += d; });
+window.pill.onDelta((d) => { raw += d; paint(true); });
 
 window.pill.onDone(() => {
-  streamDone = true;
-  finishProgress();   // 补满进度条，动画走完才揭晓
+  dot.className = 'dot';
+  pillEl.classList.remove('working');
+  paint(false);
 });
 
 window.pill.onError((msg) => {
-  clearTimeout(progressTimer);
-  progressDone = streamDone = true;
   dot.className = 'dot error';
-  pillEl.classList.remove('working', 'waiting');
+  pillEl.classList.remove('working');
   headline.innerHTML = `<span style="font-size:14px">${esc(msg)}</span>`;
   sourceEl.textContent = '';
   tonesEl.innerHTML = '';
