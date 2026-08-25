@@ -14,6 +14,7 @@ const whyEl = $('#why');
 const hint = $('#hint');
 const btnCopy = $('#btn-copy');
 const btnClose = $('#btn-close');
+const statusEl = $('#status');
 const progressFill = $('#progress-fill');
 const waitingEl = $('#waiting');
 
@@ -30,22 +31,22 @@ let sourceText = '';
 let t = (k) => k;
 
 const STRINGS = {
-  zh: { idle: '移入即可翻译', working: '正在看', done: '', error: '出错', copied: '已复制', copy: '复制译文',
+  zh: { idle: '移入即可翻译', working: '正在看', ready: '好了', done: '', error: '出错', copied: '已复制', copy: '复制译文',
         why: '为什么这样说', hint: '移开自动收起', pinned: '已钉住', empty: '模型没有返回内容',
         translate: '译 → 英', proofread: '英文校对' },
-  en: { idle: 'Hover to translate', working: 'Working', done: '', error: 'Error', copied: 'Copied', copy: 'Copy',
+  en: { idle: 'Hover to translate', working: 'Working', ready: 'Ready', done: '', error: 'Error', copied: 'Copied', copy: 'Copy',
         why: 'Why it reads better', hint: 'Move away to collapse', pinned: 'Pinned', empty: 'The model returned nothing',
         translate: '→ EN', proofread: 'Polish' },
-  vi: { idle: 'Di chuột vào để dịch', working: 'Đang xử lý', done: '', error: 'Lỗi', copied: 'Đã sao chép', copy: 'Sao chép',
+  vi: { idle: 'Di chuột vào để dịch', working: 'Đang xử lý', ready: 'Xong', done: '', error: 'Lỗi', copied: 'Đã sao chép', copy: 'Sao chép',
         why: 'Vì sao nên viết vậy', hint: 'Di chuột ra để thu gọn', pinned: 'Đã ghim', empty: 'Mô hình không trả về nội dung',
         translate: '→ EN', proofread: 'Hiệu đính' },
-  id: { idle: 'Arahkan kursor untuk menerjemahkan', working: 'Memproses', done: '', error: 'Error', copied: 'Tersalin', copy: 'Salin',
+  id: { idle: 'Arahkan kursor untuk menerjemahkan', working: 'Memproses', ready: 'Siap', done: '', error: 'Error', copied: 'Tersalin', copy: 'Salin',
         why: 'Kenapa begini lebih baik', hint: 'Jauhkan kursor untuk menutup', pinned: 'Disematkan', empty: 'Model tidak mengembalikan apa pun',
         translate: '→ EN', proofread: 'Perbaiki' },
-  th: { idle: 'เลื่อนเมาส์เข้ามาเพื่อแปล', working: 'กำลังทำงาน', done: '', error: 'ผิดพลาด', copied: 'คัดลอกแล้ว', copy: 'คัดลอก',
+  th: { idle: 'เลื่อนเมาส์เข้ามาเพื่อแปล', working: 'กำลังทำงาน', ready: 'เสร็จแล้ว', done: '', error: 'ผิดพลาด', copied: 'คัดลอกแล้ว', copy: 'คัดลอก',
         why: 'ทำไมจึงดีกว่า', hint: 'เลื่อนเมาส์ออกเพื่อย่อ', pinned: 'ปักหมุดแล้ว', empty: 'โมเดลไม่ได้ส่งเนื้อหากลับมา',
         translate: '→ EN', proofread: 'ขัดเกลา' },
-  ms: { idle: 'Halakan tetikus untuk terjemah', working: 'Memproses', done: '', error: 'Ralat', copied: 'Disalin', copy: 'Salin',
+  ms: { idle: 'Halakan tetikus untuk terjemah', working: 'Memproses', ready: 'Siap', done: '', error: 'Ralat', copied: 'Disalin', copy: 'Salin',
         why: 'Kenapa ini lebih baik', hint: 'Alihkan tetikus untuk tutup', pinned: 'Disemat', empty: 'Model tidak mengembalikan apa-apa',
         translate: '→ EN', proofread: 'Perhalus' },
 };
@@ -127,6 +128,14 @@ function renderWhy(lines) {
     .join('');
 }
 
+/* ---------------- 右上角状态 ---------------- */
+
+// 展开后头部右侧显示当前状态。收起态那里让位给预览截段，所以只在展开时可见。
+function setStatus(text, kind) {
+  statusEl.textContent = text || '';
+  statusEl.className = 'status' + (kind ? ' ' + kind : '');
+}
+
 /* ---------------- 悬停进度 ---------------- */
 
 function startDwell(ms) {
@@ -200,7 +209,11 @@ document.addEventListener('click', (e) => {
   if (e.target.closest('#btn-copy')) {
     e.stopPropagation();
     const txt = variants[chosen] ? variants[chosen].text : raw.trim();
-    if (txt) { window.pill.copy(txt); hint.textContent = t('copied'); }
+    if (txt) {
+      window.pill.copy(txt);
+      hint.textContent = t('copied');
+      setStatus(t('copied'), 'ok');
+    }
     return;
   }
   if (e.target.closest('#btn-close')) { e.stopPropagation(); window.pill.close(); return; }
@@ -223,6 +236,8 @@ window.pill.onPinned((v) => {
   pinned = !!v;
   pillEl.classList.toggle('pinned', pinned);
   hint.textContent = pinned ? t('pinned') : t('hint');
+  if (pinned) setStatus(t('pinned'), 'ok');
+  else if (!pillEl.classList.contains('working')) setStatus(t('ready'), 'ok');
 });
 
 window.pill.onDwell((ms) => startDwell(ms));
@@ -250,6 +265,7 @@ window.pill.onStart(({ language, mode, source }) => {
   pillEl.classList.remove('pinned');
   pinned = false;
   waitingEl.textContent = t('working');
+  setStatus(t('working'));
 });
 
 window.pill.onDelta((d) => { raw += d; paint(true); });
@@ -257,12 +273,14 @@ window.pill.onDelta((d) => { raw += d; paint(true); });
 window.pill.onDone(() => {
   dot.className = 'dot';
   pillEl.classList.remove('working');
+  setStatus(t('ready'), 'ok');
   paint(false);
 });
 
 window.pill.onError((msg) => {
   dot.className = 'dot error';
   pillEl.classList.remove('working');
+  setStatus(t('error'), 'err');
   headline.innerHTML = `<span style="font-size:14px">${esc(msg)}</span>`;
   sourceEl.textContent = '';
   tonesEl.innerHTML = '';

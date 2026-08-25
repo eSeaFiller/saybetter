@@ -1,5 +1,5 @@
 {
-  "version": "0.4.2",
-  "url": "https://github.com/eSeaFiller/saybetter/releases/download/v0.4.2/SayBetter-0.4.2-arm64.dmg",
-  "notes": "悬停进度条时长由 1.5 秒改为 1 秒"
+  "version": "0.4.3",
+  "url": "https://github.com/eSeaFiller/saybetter/releases/download/v0.4.3/SayBetter-0.4.3-arm64.dmg",
+  "notes": "补上展开后右上角的状态区：显示正在看/好了/已复制/已钉住/出错，关闭按钮从底部移到这里"
 }

@@ -40,6 +40,7 @@ SayBetter 想去掉的就是这二十秒。
 - 非英文自动翻译为英文并保留原文语气；英文则做语法校对。
 - 浮窗出现在你正在使用的那块屏幕顶端，跟随切换桌面（Space）与全屏应用，且不抢占键盘焦点。
 - 展开后四种语气固定在顶部，无需滚动即可切换；正文字号随长度自适应。
+- 右上角状态区显示当前进展：正在看 / 好了 / 已复制 / 已钉住 / 出错，旁边是关闭按钮。
 - 结果不会在你没准备好时蹦出来：要等悬停进度条走满才展开，每次节奏一致。
 - 极光渐变与玻璃态：四条色带在玻璃后缓慢漂移（11–16 秒），前景是半透明玻璃卡片加高光描边，叠原生毛玻璃。
 - 顶部保留极光、正文区压深，最坏情况（白色桌面 + 最亮色带）下所有文字仍满足 WCAG 对比度。
@@ -122,6 +123,7 @@ There is also a green dot in the menu bar. If the text is already on your clipbo
 - Non-English input is translated into English with the original tone preserved; English input is proofread.
 - The pill appears at the top of whichever display you are working on, follows you across Spaces and full-screen apps, and never steals keyboard focus.
 - The four registers stay pinned at the top — no scrolling needed to switch. Body text scales with length.
+- A status area in the top-right corner reports progress — working, ready, copied, pinned, or error — next to the close button.
 - Results never appear before you are ready: the hover progress bar must fill first, so the rhythm is the same every time.
 - Aurora gradients behind glass: four colour bands drift slowly (11–16s) behind a translucent glass card with a highlight rim, on top of native macOS vibrancy.
 - The aurora stays near the top while the body area is darkened, so every piece of text still clears WCAG contrast even in the worst case (white desktop under the brightest band).
