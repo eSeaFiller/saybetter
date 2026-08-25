@@ -1,6 +1,6 @@
 {
   "name": "saybetter",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "description": "SayBetter — 菜单栏常驻的语法与表达检查小工具",
   "main": "main.js",
   "scripts": {
@@ -24,8 +24,10 @@
       "providers.js",
       "updater.js",
       "renderer/**",
-      "iconTemplate.png",
-      "iconTemplate@2x.png"
+      "trayDot.png",
+      "trayDot@2x.png",
+      "trayDotBusy.png",
+      "trayDotBusy@2x.png"
     ],
     "mac": {
       "category": "public.app-category.productivity",

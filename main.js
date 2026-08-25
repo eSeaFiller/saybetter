@@ -210,10 +210,24 @@ function togglePanel() {
 // 窗口盖上去会被挡住，所以贴着它的下沿。
 function positionPill(w, h) {
   if (!pillWin || pillWin.isDestroyed()) return;
-  const d = screen.getPrimaryDisplay();
+  // 放在「你正在用的那块屏」顶端，而不是写死主屏 —— 否则你在外接屏上敲字，
+  // 浮窗却弹在笔记本屏幕上，看起来就像"只在某一个桌面才有"。
+  const d = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
   const x = Math.round(d.bounds.x + (d.bounds.width - w) / 2);
   const y = Math.round(d.workArea.y); // workArea.y 已经把菜单栏/刘海让开
   pillWin.setBounds({ x, y, width: w, height: h });
+}
+
+// 让浮窗跟着你走：所有桌面（Space）、全屏应用之上都能看到。
+// macOS 上窗口每次 hide/show 之后 collectionBehavior 可能被重置，
+// 所以不能只在创建时设一次，每次显示都要重新声明。
+function keepPillEverywhere() {
+  if (!pillWin || pillWin.isDestroyed()) return;
+  pillWin.setVisibleOnAllWorkspaces(true, {
+    visibleOnFullScreen: true,
+    skipTransformProcessType: true, // 不加这个，切换时 app 会被短暂拉成前台
+  });
+  pillWin.setAlwaysOnTop(true, 'screen-saver');
 }
 
 function createPill() {
@@ -241,9 +255,7 @@ function createPill() {
       nodeIntegration: false,
     },
   });
-  // screen-saver 层级才能盖在菜单栏和全屏应用之上
-  pillWin.setAlwaysOnTop(true, 'screen-saver');
-  pillWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  keepPillEverywhere(); // screen-saver 层级 + 所有桌面可见
   pillWin.loadFile(path.join(__dirname, 'renderer', 'pill.html'));
 }
 
@@ -312,7 +324,9 @@ async function runInPill(text) {
   pillPinned = false;
   pillSend('pill:expanded', false);
   pillSend('pill:start', { language: cfg.language || 'zh' });
+  setTrayBusy(true);
   pillWin.showInactive(); // 不抢焦点
+  keepPillEverywhere();   // hide/show 之后要重新声明，否则会退回"只在当前桌面"
   // 必须在 show 之后再定位：窗口还隐藏时设的 bounds 不生效，
   // macOS 会在显示的瞬间把它摆回默认的「屏幕正中」。
   positionPill(PILL_W, PILL_H);
@@ -339,6 +353,7 @@ async function runInPill(text) {
     }
   } finally {
     if (pillAbort === ac) pillAbort = null;
+    setTrayBusy(false);
   }
 }
 
@@ -387,12 +402,22 @@ function applyClipboardWatch(cfg) {
 
 /* ---------------- tray ---------------- */
 
-function trayIcon() {
-  // 必须是 PNG —— nativeImage 在 macOS 上不认 SVG。
-  // 文件名带 Template 会被当作模板图，自动跟随明暗菜单栏。
-  const img = nativeImage.createFromPath(path.join(__dirname, 'iconTemplate.png'));
-  img.setTemplateImage(true);
-  return img;
+// 菜单栏那颗绿点。必须是 PNG —— nativeImage 在 macOS 上不认 SVG。
+// 这里刻意不设 setTemplateImage：模板图会被系统按明暗主题重绘成黑白，
+// 绿色就没了。绿点本身在深浅菜单栏下都够清楚。
+function trayIcon(busy = false) {
+  const file = busy ? 'trayDotBusy.png' : 'trayDot.png';
+  return nativeImage.createFromPath(path.join(__dirname, file));
+}
+
+// 正在处理时把实心点换成空心圈，给一个"它在干活"的信号
+function setTrayBusy(busy) {
+  if (!tray || tray.isDestroyed()) return;
+  try {
+    tray.setImage(trayIcon(busy));
+  } catch {
+    /* 托盘可能已销毁 */
+  }
 }
 
 function buildTray() {
@@ -421,7 +446,21 @@ function buildTray() {
     { label: '退出', click: () => { app.exit(0); } },
   ]);
   tray.setContextMenu(menu);
-  tray.on('click', togglePanel);
+  // 点绿点 = 用当前剪贴板内容直接跑一轮（和复制触发是同一条路）。
+  // 剪贴板里没有可处理的内容时，退回打开输入面板，让你手动敲。
+  tray.on('click', () => {
+    if (pillWin && !pillWin.isDestroyed() && pillWin.isVisible()) {
+      hidePill();
+      return;
+    }
+    const text = (clipboard.readText() || '').trim();
+    if (shouldWatch(text)) {
+      lastClipboard = clipboard.readText(); // 别让轮询紧接着再触发一次
+      runInPill(text);
+    } else {
+      showPanel();
+    }
+  });
 }
 
 /* ---------------- hotkey ---------------- */

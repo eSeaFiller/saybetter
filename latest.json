@@ -1,5 +1,5 @@
 {
-  "version": "0.2.8",
-  "url": "https://github.com/eSeaFiller/saybetter/releases/download/v0.2.8/SayBetter-0.2.8-arm64.dmg",
-  "notes": "保留程序坞图标，可从程序坞打开；更新检查改走 raw.githubusercontent.com，绕开 GitHub API 的匿名限流"
+  "version": "0.2.9",
+  "url": "https://github.com/eSeaFiller/saybetter/releases/download/v0.2.9/SayBetter-0.2.9-arm64.dmg",
+  "notes": "浮窗跟随所有桌面与全屏应用，并出现在你正在用的那块屏；菜单栏新增绿点，点击即可用当前剪贴板触发"
 }
