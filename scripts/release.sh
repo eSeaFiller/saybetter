@@ -53,12 +53,24 @@ git commit -m "发布 ${VERSION}${NOTES:+：${NOTES}}" || true
 git push origin main
 gh release create "v${VERSION}" "${DMG}" --title "SayBetter ${VERSION}" --notes "${NOTES:-见提交记录}"
 
-# 7) 验一下更新检查真能查到这一版
-sleep 3
+# 7) 验一下更新检查真能查到这一版。
+#    raw.githubusercontent.com 是 CDN，推送后要等一会儿才刷新，
+#    所以轮询而不是只等 3 秒 —— 否则会拿到上一版，看起来像发版失败。
 node -e "
-require('./updater.js').checkForUpdate('0.0.1').then(r => {
-  if (!r) return console.error('✗ 更新检查查不到，检查 latest.json 是否已推上去');
-  console.log('✓ 更新检查可用：', r.via, r.version, r.url);
-});
+const u = require('./updater.js');
+const want = '${VERSION}';
+(async () => {
+  for (let i = 0; i < 20; i++) {
+    const r = await u.checkForUpdate('0.0.1');
+    if (r && r.version === want) {
+      console.log('✓ 更新检查可用：', r.via, r.version);
+      return;
+    }
+    if (i === 0 && r) console.log('  CDN 还是旧版(' + r.version + ')，等待刷新…');
+    await new Promise(res => setTimeout(res, 5000));
+  }
+  console.error('✗ 等了 100 秒 CDN 仍未刷新到 ' + want + '，稍后手动确认 latest.json');
+  process.exit(1);
+})();
 "
 echo "完成：https://github.com/eSeaFiller/saybetter/releases/tag/v${VERSION}"

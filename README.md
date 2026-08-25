@@ -194,7 +194,11 @@ scripts/release.sh 0.2.9 "这一版改了什么"
 
 每 6 小时、以及启动后 8 秒，静默查一次仓库里的 `latest.json`。
 
-不查 GitHub API 的原因：`api.github.com` 对匿名请求限 60 次/小时且按出口 IP 计，公司网络下几百人共用一个出口 IP，额度常年被占满（实测直接返回 403）。因此主用 `raw.githubusercontent.com`（CDN，无此限制），API 仅作兜底。
+依次尝试三条路径，任何一条成功即返回：
+
+1. `/releases/latest` 的 302 重定向目标里带版本号。不限流、不缓存，发版后立刻可见，是主路径。
+2. 仓库里的 `latest.json`，能带上更新说明。`raw.githubusercontent.com` 按路径缓存 300 秒（加查询串也绕不开），因此可能比实际版本慢几分钟，只适合当兜底。
+3. GitHub API。匿名请求限 60 次/小时且按出口 IP 计，公司网络下几百人共用一个出口 IP，额度常年被占满（实测直接返回 403），所以放在最后。
 
 未采用静默自动更新的原因：macOS 上 electron-updater 依赖 Squirrel.Mac 校验代码签名，而本应用目前为 adhoc 签名（无 Apple Developer ID）。adhoc 签名的包无法装上更新，这是系统机制而非配置问题。取得证书后将 `updater.js` 替换为 electron-updater 即可，其余代码无需改动。
 

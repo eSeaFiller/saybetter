@@ -6,14 +6,16 @@
 // 而我们目前是 adhoc 签名（没有 Apple Developer ID），装不上更新。等哪天有证书了，
 // 把这个文件换成 electron-updater 即可，其余代码不用动。
 //
-// 为什么不直接查 GitHub API：api.github.com 对匿名请求限 60 次/小时，而且是按
-// 出口 IP 算的。公司网络下几百号人共用一个出口 IP，额度早被别的工具用光，
-// 实测直接 403。raw.githubusercontent.com 是 CDN，不受这个限制，所以主用它读
-// 一个仓库里的 latest.json；API 只作为兜底。
+// 三条路径，依次尝试，任何一条成功就返回：
+//   1. redirect —— /releases/latest 的 302 目标里带版本号。不限流、不缓存，最实时。
+//   2. raw      —— 仓库里的 latest.json，能带上更新说明。按路径缓存 300 秒，会慢几分钟。
+//   3. api      —— GitHub API。匿名限 60 次/小时且按出口 IP 计，公司网络下常年 403，
+//                  所以只当最后的兜底。
 
 const REPO = 'eSeaFiller/saybetter';
 const BRANCH = 'main';
 const FEED_RAW = `https://raw.githubusercontent.com/${REPO}/${BRANCH}/latest.json`;
+const FEED_REDIRECT = `https://github.com/${REPO}/releases/latest`;
 const FEED_API = `https://api.github.com/repos/${REPO}/releases/latest`;
 const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 小时
 
@@ -46,9 +48,30 @@ async function getJson(url, headers = {}) {
   return res.json();
 }
 
+// 最可靠的一条：/releases/latest 会 302 到 /releases/tag/vX.Y.Z，
+// 从最终 URL 里就能读出版本号。它不走 API（无 60 次/小时限流），
+// 也不像 raw 那样有 300 秒 CDN 缓存 —— 发版后立刻就是新版本。
+async function fromRedirect() {
+  const res = await fetch(FEED_REDIRECT, {
+    headers: { 'user-agent': 'SayBetter' },
+    redirect: 'follow',
+    signal: AbortSignal.timeout(8000),
+  });
+  const m = String(res.url || '').match(/\/releases\/tag\/v?([0-9]+(?:\.[0-9]+)*)/);
+  if (!m) throw new Error('no tag in redirect');
+  const version = m[1];
+  return {
+    version,
+    url: `https://github.com/${REPO}/releases/download/v${version}/SayBetter-${version}-arm64.dmg`,
+    notes: '',
+  };
+}
+
 // latest.json 长这样：{ "version": "0.2.8", "url": "https://…dmg", "notes": "…" }
+// 注意：raw.githubusercontent.com 按路径缓存 300 秒，加查询串也绕不开，
+// 所以它可能比实际版本慢几分钟。作为兜底够用，但不适合当主路径。
 async function fromRaw() {
-  const j = await getJson(`${FEED_RAW}?t=${Date.now()}`); // 绕开 CDN 缓存
+  const j = await getJson(FEED_RAW);
   const version = String(j.version || '').replace(/^v/i, '');
   if (!version) throw new Error('no version');
   return {
@@ -76,7 +99,7 @@ async function fromApi() {
  * 返回 { hasUpdate, version, url, notes, via } 或 null（都查不到）。
  */
 async function checkForUpdate(currentVersion) {
-  for (const [via, fn] of [['raw', fromRaw], ['api', fromApi]]) {
+  for (const [via, fn] of [['redirect', fromRedirect], ['raw', fromRaw], ['api', fromApi]]) {
     try {
       const r = await fn();
       return { ...r, via, hasUpdate: isNewer(r.version, currentVersion) };
