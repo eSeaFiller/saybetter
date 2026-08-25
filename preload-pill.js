@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('pill', {
   click: () => ipcRenderer.send('pill:click'),
   close: () => ipcRenderer.send('pill:close'),
   copy: (t) => ipcRenderer.send('pill:copy', t),
+  onIdle: (fn) => ipcRenderer.on('pill:idle', (_e, p) => fn(p)),
   onStart: (fn) => ipcRenderer.on('pill:start', (_e, p) => fn(p)),
   onDelta: (fn) => ipcRenderer.on('pill:delta', (_e, d) => fn(d)),
   onDone: (fn) => ipcRenderer.on('pill:done', () => fn()),

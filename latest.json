@@ -1,5 +1,5 @@
 {
-  "version": "0.3.4",
-  "url": "https://github.com/eSeaFiller/saybetter/releases/download/v0.3.4/SayBetter-0.3.4-arm64.dmg",
-  "notes": "灵动岛改为极光渐变加玻璃态：四条色带在玻璃后漂移，高光描边与柔和阴影，Hover 提亮描边、Active 缩至 0.98"
+  "version": "0.4.0",
+  "url": "https://github.com/eSeaFiller/saybetter/releases/download/v0.4.0/SayBetter-0.4.0-arm64.dmg",
+  "notes": "改为悬停才翻译：复制只亮出浮窗不发请求，鼠标移入停留后才送出文本并跑真实进度条；不想动鼠标可用快捷键或菜单栏绿点立即触发"
 }

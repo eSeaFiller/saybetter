@@ -20,7 +20,7 @@
 
 SayBetter 想去掉的就是这二十秒。
 
-它常驻在后台，监听你的剪贴板。你在任何地方选中文字按 `⌘C`，屏幕顶端刘海下方就会浮出一颗胶囊开始工作：
+它常驻在后台，监听你的剪贴板。你在任何地方选中文字按 `⌘C`，屏幕顶端刘海下方就会浮出一颗胶囊——**这时它只是亮着，什么都还没发出去**。把鼠标移上去停一下，它才开始工作：
 
 - 复制的是中文或任何非英文，它翻译成英文，并保留你原话的语气和正式程度——原文直白就保持直白，原文客气就保持客气。
 - 复制的是英文，它检查语法、改得更地道。
@@ -33,7 +33,8 @@ SayBetter 想去掉的就是这二十秒。
 
 ### 功能
 
-- 复制即触发，无需切换应用或按任何快捷键。
+- 复制即亮出，鼠标移上去停约 1.2 秒才真正开始翻译。**没移上去，文本一个字节都不会离开这台电脑。**
+- 不想动鼠标时，按全局快捷键（默认 `⌥Space`）或点菜单栏绿点即可立即翻译。
 - 一次给出默认、专业、轻松、简洁四种表达，可分别复制。
 - 每种表达附带可展开的修改说明，标出改动的词和原因。
 - 非英文自动翻译为英文并保留原文语气；英文则做语法校对。
@@ -76,7 +77,7 @@ SayBetter 想去掉的就是这二十秒。
 ### 隐私
 
 - API Key 通过系统钥匙串加密后保存在本机 `~/Library/Application Support/SayBetter`。
-- **开启「监听复制」后，你复制的内容会发送给你自己配置的那家模型服务商。** 复制密码、密钥等敏感内容前，请在设置中关闭该开关。
+- **只有你把鼠标移入浮窗、或主动按快捷键/点绿点之后，文本才会发送给你配置的模型服务商。** 仅仅复制不会触发任何网络请求。
 - 应用不上传任何数据到作者处，不含分析、遥测或远程服务。
 - 少于 2 个字、超过 1200 字、纯网址、纯邮箱地址的内容会被自动跳过，不会发送。
 
@@ -102,7 +103,7 @@ So you open a browser, switch to some AI tool, sign in, copy, paste, wait, and c
 
 SayBetter exists to remove those twenty seconds.
 
-It sits in the background watching your clipboard. Press `⌘C` anywhere and a pill drops down from the top of the screen and starts working:
+It sits in the background watching your clipboard. Press `⌘C` anywhere and a pill drops down from the top of the screen — **at this point it is merely lit; nothing has been sent anywhere**. Rest the pointer on it and only then does it start working:
 
 - Copy Chinese, or any non-English text, and it translates into English while preserving your register — blunt stays blunt, warm stays warm.
 - Copy English and it corrects the grammar and makes it sound natural.
@@ -115,7 +116,8 @@ There is also a green dot in the menu bar. If the text is already on your clipbo
 
 ### Features
 
-- Triggered by copying. No app switching, no shortcut required.
+- Copying lights the pill; translation starts only after the pointer rests on it for about 1.2 seconds. **If you never hover, not one byte of the text leaves your machine.**
+- Prefer not to move the mouse? Press the global shortcut (`⌥Space`) or click the green menu-bar dot to translate immediately.
 - Four registers at once — Default, Professional, Casual, Concise — each individually copyable.
 - Every version carries an expandable explanation naming the words that changed and why.
 - Non-English input is translated into English with the original tone preserved; English input is proofread.
@@ -158,7 +160,7 @@ Repeat steps 2 and 3 after each update. Your settings are preserved.
 ### Privacy
 
 - The API key is encrypted with the system keychain and stored locally in `~/Library/Application Support/SayBetter`.
-- **With clipboard watching enabled, everything you copy is sent to the model provider you configured.** Turn the switch off in Settings before copying passwords or secrets.
+- **Text is sent to your configured provider only after you hover the pill, press the shortcut, or click the green dot.** Copying alone triggers no network request.
 - The app uploads nothing to the author and contains no analytics, telemetry, or remote service.
 - Text shorter than 2 characters, longer than 1200 characters, or consisting solely of a URL or an email address is skipped and never sent.
 

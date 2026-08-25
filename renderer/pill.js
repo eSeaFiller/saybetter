@@ -17,7 +17,10 @@ const btnClose = $('#btn-close');
 const progressFill = $('#progress-fill');
 const waitingEl = $('#waiting');
 
-const PROGRESS_MS = 2000; // 进度条走满的时长；走满之前不揭晓结果
+// 进度条跟真实请求走：先快后慢逼近 90%，请求真正完成时才补到 100%。
+// 不写死时长 —— 请求快就快、慢就诚实地慢下来，而不是假装在走。
+const PROGRESS_CREEP_MS = 2200; // 爬到 90% 大约用这么久
+const PROGRESS_FINISH_MS = 220; // 收尾补满的时长
 
 let raw = '';
 let variants = [];   // [{ tone, text, why[] }]
@@ -31,22 +34,22 @@ let progressTimer = null;
 let t = (k) => k;
 
 const STRINGS = {
-  zh: { working: '正在看', done: '', error: '出错', copied: '已复制', copy: '复制译文',
+  zh: { idle: '移入即可翻译', working: '正在看', done: '', error: '出错', copied: '已复制', copy: '复制译文',
         why: '为什么这样说', hint: '移开自动收起', pinned: '已钉住', empty: '模型没有返回内容',
         translate: '译 → 英', proofread: '英文校对' },
-  en: { working: 'Working', done: '', error: 'Error', copied: 'Copied', copy: 'Copy',
+  en: { idle: 'Hover to translate', working: 'Working', done: '', error: 'Error', copied: 'Copied', copy: 'Copy',
         why: 'Why it reads better', hint: 'Move away to collapse', pinned: 'Pinned', empty: 'The model returned nothing',
         translate: '→ EN', proofread: 'Polish' },
-  vi: { working: 'Đang xử lý', done: '', error: 'Lỗi', copied: 'Đã sao chép', copy: 'Sao chép',
+  vi: { idle: 'Di chuột vào để dịch', working: 'Đang xử lý', done: '', error: 'Lỗi', copied: 'Đã sao chép', copy: 'Sao chép',
         why: 'Vì sao nên viết vậy', hint: 'Di chuột ra để thu gọn', pinned: 'Đã ghim', empty: 'Mô hình không trả về nội dung',
         translate: '→ EN', proofread: 'Hiệu đính' },
-  id: { working: 'Memproses', done: '', error: 'Error', copied: 'Tersalin', copy: 'Salin',
+  id: { idle: 'Arahkan kursor untuk menerjemahkan', working: 'Memproses', done: '', error: 'Error', copied: 'Tersalin', copy: 'Salin',
         why: 'Kenapa begini lebih baik', hint: 'Jauhkan kursor untuk menutup', pinned: 'Disematkan', empty: 'Model tidak mengembalikan apa pun',
         translate: '→ EN', proofread: 'Perbaiki' },
-  th: { working: 'กำลังทำงาน', done: '', error: 'ผิดพลาด', copied: 'คัดลอกแล้ว', copy: 'คัดลอก',
+  th: { idle: 'เลื่อนเมาส์เข้ามาเพื่อแปล', working: 'กำลังทำงาน', done: '', error: 'ผิดพลาด', copied: 'คัดลอกแล้ว', copy: 'คัดลอก',
         why: 'ทำไมจึงดีกว่า', hint: 'เลื่อนเมาส์ออกเพื่อย่อ', pinned: 'ปักหมุดแล้ว', empty: 'โมเดลไม่ได้ส่งเนื้อหากลับมา',
         translate: '→ EN', proofread: 'ขัดเกลา' },
-  ms: { working: 'Memproses', done: '', error: 'Ralat', copied: 'Disalin', copy: 'Salin',
+  ms: { idle: 'Halakan tetikus untuk terjemah', working: 'Memproses', done: '', error: 'Ralat', copied: 'Disalin', copy: 'Salin',
         why: 'Kenapa ini lebih baik', hint: 'Alihkan tetikus untuk tutup', pinned: 'Disemat', empty: 'Model tidak mengembalikan apa-apa',
         translate: '→ EN', proofread: 'Perhalus' },
 };
@@ -148,15 +151,26 @@ function startProgress() {
   progressFill.style.transition = 'none';
   progressFill.style.width = '0%';
   void progressFill.offsetWidth;
-  progressFill.style.transition = `width ${PROGRESS_MS}ms linear`;
-  progressFill.style.width = '100%';
+  // ease-out：开头跑得快（让人立刻看到有反应），越接近 90% 越慢
+  progressFill.style.transition = `width ${PROGRESS_CREEP_MS}ms cubic-bezier(0.12, 0.8, 0.25, 1)`;
+  progressFill.style.width = '90%';
 
+  // 爬到头模型还没回来：原地呼吸，表示还在等而不是卡住
+  progressTimer = setTimeout(() => {
+    if (!streamDone) pillEl.classList.add('waiting');
+  }, PROGRESS_CREEP_MS);
+}
+
+// 请求真的完成了：把进度补满，收尾动画走完再揭晓
+function finishProgress() {
+  clearTimeout(progressTimer);
+  pillEl.classList.remove('waiting');
+  progressFill.style.transition = `width ${PROGRESS_FINISH_MS}ms ease-out`;
+  progressFill.style.width = '100%';
   progressTimer = setTimeout(() => {
     progressDone = true;
-    // 走满了但模型还没回来：原地呼吸，别让人以为卡住了
-    if (!streamDone) pillEl.classList.add('waiting');
     maybeReveal();
-  }, PROGRESS_MS);
+  }, PROGRESS_FINISH_MS);
 }
 
 /* ---------------- 渲染 ---------------- */
@@ -237,6 +251,29 @@ window.pill.onPinned((v) => {
   hint.textContent = pinned ? t('pinned') : t('hint');
 });
 
+// 复制之后先待命：亮出方向标和一句提示，不发请求、不跑进度。
+window.pill.onIdle(({ language, mode }) => {
+  const s = STRINGS[language] || STRINGS.zh;
+  t = (k) => (s[k] !== undefined ? s[k] : k);
+  clearTimeout(progressTimer);
+  raw = ''; variants = []; chosen = 0; sourceText = '';
+  progressDone = streamDone = false;
+
+  directionEl.textContent = t(mode === 'proofread' ? 'proofread' : 'translate');
+  headline.innerHTML = ''; sourceEl.textContent = ''; tonesEl.innerHTML = '';
+  whyWrap.hidden = true;
+  peek.textContent = t('idle');
+  waitingEl.textContent = t('idle');
+  hint.textContent = t('hint');
+  btnCopy.textContent = t('copy');
+  dot.className = 'dot';
+  pillEl.classList.add('working');          // 结果区让位，只显示提示
+  pillEl.classList.remove('pinned', 'waiting');
+  progressFill.style.transition = 'none';
+  progressFill.style.width = '0%';
+  pinned = false;
+});
+
 window.pill.onStart(({ language, mode, source }) => {
   const s = STRINGS[language] || STRINGS.zh;
   t = (k) => (s[k] !== undefined ? s[k] : k);
@@ -267,8 +304,7 @@ window.pill.onDelta((d) => { raw += d; });
 
 window.pill.onDone(() => {
   streamDone = true;
-  pillEl.classList.remove('waiting');
-  maybeReveal();
+  finishProgress();   // 补满进度条，动画走完才揭晓
 });
 
 window.pill.onError((msg) => {
