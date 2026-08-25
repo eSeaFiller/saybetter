@@ -36,9 +36,10 @@ const DEFAULT_CONFIG = {
 // 灵动岛浮窗尺寸
 const PILL_W = 260;
 const PILL_H = 34;
-const PILL_EXPANDED_W = 480;
-const PILL_EXPANDED_H = 430;
+const PILL_EXPANDED_W = 440;
+const PILL_EXPANDED_H = 380;
 const CLIPBOARD_POLL_MS = 400;
+const HOVER_DELAY_MS = 1200; // 鼠标停留这么久才展开，避免路过就炸开
 const MAX_WATCH_CHARS = 1200; // 太长的复制（整篇文档、大段代码）不自动送去 API
 
 let tray = null;
@@ -59,6 +60,7 @@ let lastClipboard = '';
 let selfWrote = ''; // 自己写进剪贴板的内容，不能再触发一轮
 let cursorTimer = null;
 let pillPinned = false; // 点过之后钉住，移开也不收
+let hoverTimer = null;  // 悬停计时：进入后要停够 HOVER_DELAY_MS 才展开
 let updateInfo = null;  // 查到的新版本，null = 没有/没查到
 
 /* ---------------- config（key 用系统钥匙串加密后落盘） ---------------- */
@@ -294,9 +296,19 @@ function startCursorWatch() {
       p.x >= b.x && p.x <= b.x + b.width &&
       p.y >= b.y - 4 && p.y <= b.y + b.height + pad;
 
-    // 移开只收成胶囊，不再隐藏 —— 结果得一直在那等着你。
-    if (inside) setPillExpanded(true);
-    else if (!pillPinned && pillExpanded) setPillExpanded(false);
+    // 进入后要停够 HOVER_DELAY_MS 才展开：鼠标只是路过顶部时不该炸开一整块面板。
+    // 移开只收成胶囊，不隐藏 —— 结果得一直在那等着你。
+    if (inside) {
+      if (!pillExpanded && !hoverTimer) {
+        hoverTimer = setTimeout(() => {
+          hoverTimer = null;
+          setPillExpanded(true);
+        }, HOVER_DELAY_MS);
+      }
+    } else {
+      if (hoverTimer) { clearTimeout(hoverTimer); hoverTimer = null; }
+      if (!pillPinned && pillExpanded) setPillExpanded(false);
+    }
   }, 120);
 }
 
@@ -306,6 +318,7 @@ function stopCursorWatch() {
 }
 
 function hidePill() {
+  if (hoverTimer) { clearTimeout(hoverTimer); hoverTimer = null; }
   pillExpanded = false;
   pillPinned = false;
   stopCursorWatch();
@@ -323,7 +336,11 @@ async function runInPill(text) {
   pillExpanded = false;
   pillPinned = false;
   pillSend('pill:expanded', false);
-  pillSend('pill:start', { language: cfg.language || 'zh' });
+  // 非英文（含中日韩、泰、越等）→ 翻译；否则是英文校对。
+  // 只用来显示方向标，真正的判断仍由模型自己做。
+  const nonLatin = (text.match(/[^\u0000-\u024F\s\p{P}\d]/gu) || []).length;
+  const mode = nonLatin > text.length * 0.15 ? 'translate' : 'proofread';
+  pillSend('pill:start', { language: cfg.language || 'zh', mode, source: text.slice(0, 300) });
   setTrayBusy(true);
   pillWin.showInactive(); // 不抢焦点
   keepPillEverywhere();   // hide/show 之后要重新声明，否则会退回"只在当前桌面"

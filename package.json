@@ -1,6 +1,6 @@
 {
   "name": "saybetter",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "SayBetter — 菜单栏常驻的语法与表达检查小工具",
   "main": "main.js",
   "scripts": {

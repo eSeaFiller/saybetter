@@ -3,32 +3,48 @@
 const $ = (s) => document.querySelector(s);
 const pillEl = $('#pill');
 const dot = $('#dot');
-const label = $('#label');
+const directionEl = $('#direction');
 const peek = $('#peek');
-const content = $('#content');
+const headline = $('#headline');
+const sourceEl = $('#source');
+const tonesEl = $('#tones');
+const whyWrap = $('#why-wrap');
+const whyLabel = $('#why-label');
+const whyEl = $('#why');
+const hint = $('#hint');
 const btnCopy = $('#btn-copy');
 const btnClose = $('#btn-close');
-const hint = $('#hint');
 
 let raw = '';
-let fixedText = '';
+let variants = [];   // [{ tone, text, why[] }]
+let chosen = 0;
 let expanded = false;
 let pinned = false;
-let texts = [];        // 四种语气的正文
-let chosen = 0;        // 当前选中哪一条（复制/摘要都跟着它）
-const openWhy = new Set(); // 记住哪些「为什么」是展开的，免得重渲染时被收回去
+let sourceText = '';
 let t = (k) => k;
 
 const STRINGS = {
-  zh: { working: '正在看…', done: '好了', error: '出错', copied: '已复制', copy: '复制', hint: '移开就自动收起', pinned: '已钉住，再点一下取消', close: '关闭', why: '为什么', empty: '模型没有返回内容' },
-  en: { working: 'Working…', done: 'Ready', error: 'Error', copied: 'Copied', copy: 'Copy', hint: 'Move away to dismiss', pinned: 'Pinned — click again to release', close: 'Close', why: 'Why', empty: 'The model returned nothing' },
-  vi: { working: 'Đang xử lý…', done: 'Xong', error: 'Lỗi', copied: 'Đã sao chép', copy: 'Sao chép', hint: 'Di chuột ra để đóng', pinned: 'Đã ghim — nhấp lại để bỏ', close: 'Đóng', why: 'Tại sao', empty: 'Mô hình không trả về nội dung' },
-  id: { working: 'Memproses…', done: 'Siap', error: 'Error', copied: 'Tersalin', copy: 'Salin', hint: 'Jauhkan kursor untuk menutup', pinned: 'Disematkan — klik lagi untuk lepas', close: 'Tutup', why: 'Alasan', empty: 'Model tidak mengembalikan apa pun' },
-  th: { working: 'กำลังทำงาน…', done: 'เสร็จแล้ว', error: 'ผิดพลาด', copied: 'คัดลอกแล้ว', copy: 'คัดลอก', hint: 'เลื่อนเมาส์ออกเพื่อปิด', pinned: 'ปักหมุดแล้ว — คลิกอีกครั้งเพื่อยกเลิก', close: 'ปิด', why: 'เหตุผล', empty: 'โมเดลไม่ได้ส่งเนื้อหากลับมา' },
-  ms: { working: 'Memproses…', done: 'Siap', error: 'Ralat', copied: 'Disalin', copy: 'Salin', hint: 'Alihkan tetikus untuk tutup', pinned: 'Disemat — klik lagi untuk lepas', close: 'Tutup', why: 'Sebab', empty: 'Model tidak mengembalikan apa-apa' },
+  zh: { working: '正在看', done: '', error: '出错', copied: '已复制', copy: '复制译文',
+        why: '为什么这样说', hint: '移开自动收起', pinned: '已钉住', empty: '模型没有返回内容',
+        translate: '译 → 英', proofread: '英文校对' },
+  en: { working: 'Working', done: '', error: 'Error', copied: 'Copied', copy: 'Copy',
+        why: 'Why it reads better', hint: 'Move away to collapse', pinned: 'Pinned', empty: 'The model returned nothing',
+        translate: '→ EN', proofread: 'Polish' },
+  vi: { working: 'Đang xử lý', done: '', error: 'Lỗi', copied: 'Đã sao chép', copy: 'Sao chép',
+        why: 'Vì sao nên viết vậy', hint: 'Di chuột ra để thu gọn', pinned: 'Đã ghim', empty: 'Mô hình không trả về nội dung',
+        translate: '→ EN', proofread: 'Hiệu đính' },
+  id: { working: 'Memproses', done: '', error: 'Error', copied: 'Tersalin', copy: 'Salin',
+        why: 'Kenapa begini lebih baik', hint: 'Jauhkan kursor untuk menutup', pinned: 'Disematkan', empty: 'Model tidak mengembalikan apa pun',
+        translate: '→ EN', proofread: 'Perbaiki' },
+  th: { working: 'กำลังทำงาน', done: '', error: 'ผิดพลาด', copied: 'คัดลอกแล้ว', copy: 'คัดลอก',
+        why: 'ทำไมจึงดีกว่า', hint: 'เลื่อนเมาส์ออกเพื่อย่อ', pinned: 'ปักหมุดแล้ว', empty: 'โมเดลไม่ได้ส่งเนื้อหากลับมา',
+        translate: '→ EN', proofread: 'ขัดเกลา' },
+  ms: { working: 'Memproses', done: '', error: 'Ralat', copied: 'Disalin', copy: 'Salin',
+        why: 'Kenapa ini lebih baik', hint: 'Alihkan tetikus untuk tutup', pinned: 'Disemat', empty: 'Model tidak mengembalikan apa-apa',
+        translate: '→ EN', proofread: 'Perhalus' },
 };
 
-/* ---------------- 同一套极简 markdown（和主面板保持一致） ---------------- */
+/* ---------------- 极简 markdown ---------------- */
 
 function esc(s) {
   return s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
@@ -39,16 +55,14 @@ function inline(s) {
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/`([^`]+)`/g, '<code>$1</code>');
 }
-// 浮窗的结构是两级：### 语气名 是一个方案，#### 为什么 是它下面的解释。
-// 所以要按标题层级拆，不能像主面板那样一视同仁。
-// 解析要宽容：模型偶尔会漏掉 # 后面的空格、多加一级、或者把整段包进代码块。
-// 判定只看 # 的个数 —— 3 个（或更少）是一个方案，4 个（或更多）是它的「为什么」。
+
+// 两级结构：最浅的一级标题是一个方案，更深的是它的「为什么」。
+// 模型不一定给「为什么」那级标题，所以还有一条兜底：方案内部第一条列表项
+// 之前是句子，从它开始都是理由。
 function parseVariants(md) {
   const lines = md.split('\n').map((ln) => ln.replace(/^\s*```\w*\s*$/, ''));
   const HEAD = /^(#{1,6})\s*(.+?)\s*$/;
 
-  // 不写死「### 是方案、#### 是说明」——模型有时整体降一级或升一级。
-  // 改成看相对层级：全文最浅的那一级就是方案，比它深的都是说明。
   let top = 7;
   for (const line of lines) {
     const h = line.match(HEAD);
@@ -61,103 +75,112 @@ function parseVariants(md) {
   for (const line of lines) {
     const h = line.match(HEAD);
     if (h) {
-      if (h[1].length > top) {
-        inWhy = true;
-      } else {
-        cur = { tone: h[2], text: [], why: [] };
-        out.push(cur);
-        inWhy = false;
-      }
+      if (h[1].length > top) inWhy = true;
+      else { cur = { tone: h[2], text: [], why: [] }; out.push(cur); inWhy = false; }
     } else if (cur) {
       (inWhy ? cur.why : cur.text).push(line);
     }
   }
 
-  // 关键兜底：很多模型根本不输出「为什么」那一级小标题，而是把理由直接写成
-  // 紧跟句子后面的一条条列表。那样理由会被并进正文气泡里，下拉就"消失"了。
-  // 所以在一个方案内部再切一刀：第一条列表项之前是句子，从它开始都是理由。
   const BULLET = /^\s*(?:[-*+•]|\d+[.)])\s+/;
   for (const v of out) {
     if (v.why.length) continue;
     const i = v.text.findIndex((l) => BULLET.test(l));
-    if (i > 0) {
-      v.why = v.text.slice(i);
-      v.text = v.text.slice(0, i);
+    if (i > 0) { v.why = v.text.slice(i); v.text = v.text.slice(0, i); }
+  }
+  return out.map((v) => ({ tone: v.tone, text: v.text.join('\n').trim(), why: v.why }));
+}
+
+// 「为什么」里已经用 **粗体** 标出了改成的说法。把这些词在主句里也高亮，
+// 一眼就能看出这句话动了哪儿 —— 这是 PhrasePeek 那种「关键词着色」的做法。
+function highlight(sentence, why) {
+  const marks = [];
+  for (const line of why) {
+    for (const m of line.matchAll(/\*\*(.+?)\*\*/g)) {
+      const w = m[1].trim();
+      if (w.length >= 2 && w.length <= 60) marks.push(w);
     }
   }
-  return out;
-}
-function renderBody(lines) {
-  let html = '', inList = false;
-  for (const line of lines) {
-    // 各家模型用的项目符号五花八门：- * + • 还有 1. / 1)，都当列表处理，
-    // 否则符号会被当成正文，跟渲染出来的圆点重复显示。
-    const li = line.match(/^\s*(?:[-*+•]|\d+[.)])\s+(.*)$/);
-    if (li) { if (!inList) { html += '<ul>'; inList = true; } html += `<li>${inline(li[1])}</li>`; }
-    else { if (inList) { html += '</ul>'; inList = false; } if (line.trim()) html += `<p>${inline(line)}</p>`; }
+  let html = esc(sentence);
+  // 长的先替换，避免短词把长短语切碎
+  for (const w of [...new Set(marks)].sort((a, b) => b.length - a.length)) {
+    const safe = esc(w).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    html = html.replace(new RegExp(`(?<!<em>)${safe}`, 'g'), `<em>${esc(w)}</em>`);
   }
-  if (inList) html += '</ul>';
   return html;
 }
 
-function render(streaming) {
-  // 重渲染前先把「为什么」的开合状态从 DOM 上抄下来。
-  // 不能依赖 toggle 事件 —— 它是异步派发的，流式更新会赶在它前面。
-  content.querySelectorAll('.why').forEach((d) => {
-    const i = Number(d.dataset.why);
-    if (d.open) openWhy.add(i); else openWhy.delete(i);
-  });
-
-  const variants = parseVariants(raw);
-  texts = variants.map((v) => v.text.join('\n').trim());
-  fixedText = texts[0] || '';
-
-  let html = '';
-  variants.forEach((v, i) => {
-    const body = v.text.join('\n').trim();
-    const why = renderBody(v.why);
-    const open = openWhy.has(i) ? ' open' : '';
-    const selected = i === chosen ? ' selected' : '';
-    html +=
-      `<div class="variant${selected}" data-i="${i}">` +
-        `<div class="v-head">` +
-          `<span class="v-tone">${esc(v.tone)}</span>` +
-          `<button class="v-copy" data-copy="${i}">${esc(t('copy'))}</button>` +
-        `</div>` +
-        `<div class="bubble">${inline(body).replace(/\n/g, '<br>')}</div>` +
-        (why
-          ? `<details class="why"${open} data-why="${i}">` +
-              `<summary>${esc(t('why'))}</summary>` +
-              `<div class="why-body">${why}</div>` +
-            `</details>`
-          : '') +
-      `</div>`;
-  });
-  // 兜底：模型没按 ###/#### 的结构输出时，至少把原文照着画出来，
-  // 绝不能出现「Ready 了但一片空白」。
-  if (!variants.length && raw.trim()) {
-    html = `<div class="bubble raw">${renderBody(raw.split('\n')) || esc(raw)}</div>`;
-    texts = [raw.trim()];
-    fixedText = raw.trim();
-  }
-  // 跑完了却连一个字都没有 —— 说明模型返回了空，得说出来而不是装作没事
-  if (!streaming && !raw.trim()) {
-    html = `<p class="dim-note">${esc(t('empty'))}</p>`;
-  }
-
-  if (streaming) html += '<span class="cursor"></span>';
-
-  const keep = content.scrollTop;
-  content.innerHTML = html;
-  content.scrollTop = keep;
-
-  // 收起态只露被选中那条的一小截
-  peek.textContent = (texts[chosen] || texts[0] || '').replace(/\n/g, ' ');
+function renderWhy(lines) {
+  const BULLET = /^\s*(?:[-*+•]|\d+[.)])\s+(.*)$/;
+  return lines
+    .map((l) => {
+      const m = l.match(BULLET);
+      const body = m ? m[1] : l;
+      return body.trim() ? `<p>${inline(body)}</p>` : '';
+    })
+    .join('');
 }
 
-/* ---------------- 展开 / 收起 ---------------- */
-// 注意：这里不再自己判断 hover。macOS 上后台 app 的窗口收不到可靠的
-// mouseenter/mouseleave，所以由主进程轮询真实光标位置后通知我们。
+/* ---------------- 渲染 ---------------- */
+
+function paint(streaming) {
+  variants = parseVariants(raw);
+  if (chosen >= variants.length) chosen = 0;
+
+  const v = variants[chosen];
+  const sentence = v ? v.text : '';
+
+  // 收起态：只露一小截，很淡
+  peek.textContent = sentence.replace(/\n/g, ' ');
+
+  if (!variants.length) {
+    headline.innerHTML = raw.trim()
+      ? esc(raw.trim())                      // 模型没按结构输出，原样显示
+      : (streaming ? '' : esc(t('empty')));
+    tonesEl.innerHTML = '';
+    whyWrap.hidden = true;
+    return;
+  }
+
+  headline.innerHTML = highlight(sentence, v.why);
+  sourceEl.textContent = sourceText;
+
+  // 语气切换：纯文字
+  tonesEl.innerHTML = variants
+    .map((x, i) => `<button class="tone${i === chosen ? ' on' : ''}" data-i="${i}">${esc(x.tone)}</button>`)
+    .join('');
+
+  const why = renderWhy(v.why);
+  whyWrap.hidden = !why;
+  whyLabel.textContent = t('why');
+  whyEl.innerHTML = why;
+}
+
+/* ---------------- 交互 ---------------- */
+
+document.addEventListener('click', (e) => {
+  const tone = e.target.closest('.tone');
+  if (tone) {
+    e.stopPropagation();
+    chosen = Number(tone.dataset.i);
+    paint(false);
+    return;
+  }
+  if (e.target.closest('#btn-copy')) {
+    e.stopPropagation();
+    const txt = variants[chosen] ? variants[chosen].text : raw.trim();
+    if (txt) { window.pill.copy(txt); hint.textContent = t('copied'); }
+    return;
+  }
+  if (e.target.closest('#btn-close')) { e.stopPropagation(); window.pill.close(); return; }
+  window.pill.click();   // 点其它地方 = 钉住 / 取消钉住
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') window.pill.close();
+});
+
+/* ---------------- 主进程事件 ---------------- */
 
 window.pill.onExpanded((v) => {
   expanded = !!v;
@@ -171,88 +194,43 @@ window.pill.onPinned((v) => {
   hint.textContent = pinned ? t('pinned') : t('hint');
 });
 
-document.addEventListener('click', (e) => {
-  if (e.target.closest('#btn-copy') || e.target.closest('#btn-close')) return;
-
-  // 复制某一条
-  const cp = e.target.closest('.v-copy');
-  if (cp) {
-    e.stopPropagation();
-    const i = Number(cp.dataset.copy);
-    chosen = i;
-    if (texts[i]) { window.pill.copy(texts[i]); hint.textContent = t('copied'); }
-    render(false);
-    return;
-  }
-
-  // 点「为什么」只展开说明，别把整颗胶囊钉住
-  if (e.target.closest('.why')) { e.stopPropagation(); return; }
-
-  // 点某个方案 = 选中它（收起态摘要和 ⌘C 都跟着走）
-  const v = e.target.closest('.variant');
-  if (v) {
-    e.stopPropagation();
-    chosen = Number(v.dataset.i);
-    render(false);
-    if (!pinned) window.pill.click(); // 顺手钉住，方便继续挑
-    return;
-  }
-
-  window.pill.click();
-});
-
-btnCopy.onclick = (e) => {
-  e.stopPropagation();
-  const txt = texts[chosen] || fixedText;
-  if (!txt) return;
-  window.pill.copy(txt);
-  hint.textContent = t('copied');
-};
-
-btnClose.onclick = (e) => {
-  e.stopPropagation();
-  window.pill.close();
-};
-
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') window.pill.close();
-});
-
-/* ---------------- 主进程事件 ---------------- */
-
-window.pill.onStart(({ language }) => {
+window.pill.onStart(({ language, mode, source }) => {
   const s = STRINGS[language] || STRINGS.zh;
-  t = (k) => s[k] || k;
+  t = (k) => (s[k] !== undefined ? s[k] : k);
+
   raw = '';
-  fixedText = '';
-  content.innerHTML = '';
+  variants = [];
+  chosen = 0;
+  sourceText = source || '';
+
+  directionEl.textContent = t(mode === 'proofread' ? 'proofread' : 'translate');
+  headline.innerHTML = '';
+  sourceEl.textContent = '';
+  tonesEl.innerHTML = '';
+  whyWrap.hidden = true;
   peek.textContent = '';
-  label.textContent = t('working');
   hint.textContent = t('hint');
   btnCopy.textContent = t('copy');
   dot.className = 'dot working';
-  texts = [];
-  chosen = 0;
-  openWhy.clear();
-  pinned = false;
+  pillEl.classList.add('working');
   pillEl.classList.remove('pinned');
-  btnClose.textContent = '✕';
+  pinned = false;
 });
 
-window.pill.onDelta((d) => {
-  raw += d;
-  render(true);
-});
+window.pill.onDelta((d) => { raw += d; paint(true); });
 
 window.pill.onDone(() => {
-  dot.className = 'dot done';
-  label.textContent = t('done');
-  render(false);
+  dot.className = 'dot';
+  pillEl.classList.remove('working');
+  paint(false);
 });
 
 window.pill.onError((msg) => {
   dot.className = 'dot error';
-  label.textContent = t('error');
-  peek.textContent = msg.slice(0, 60);
-  content.innerHTML = `<p>${esc(msg)}</p>`;
+  pillEl.classList.remove('working');
+  headline.innerHTML = `<span style="font-size:14px">${esc(msg)}</span>`;
+  sourceEl.textContent = '';
+  tonesEl.innerHTML = '';
+  whyWrap.hidden = true;
+  peek.textContent = t('error');
 });

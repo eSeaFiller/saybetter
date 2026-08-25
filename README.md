@@ -38,6 +38,7 @@ SayBetter 想去掉的就是这二十秒。
 - 每种表达附带可展开的修改说明，标出改动的词和原因。
 - 非英文自动翻译为英文并保留原文语气；英文则做语法校对。
 - 浮窗出现在你正在使用的那块屏幕顶端，跟随切换桌面（Space）与全屏应用，且不抢占键盘焦点。
+- 鼠标停留约 1.2 秒才展开，只是路过不会被打断。
 - 菜单栏常驻一颗绿点，点它即可用当前剪贴板内容触发一次；处理中会变成空心圈。
 - 处理中和出结果后浮窗保持显示，不会自行消失。
 - 可接入 Anthropic、DeepSeek、Kimi、通义千问、智谱、豆包/火山方舟、OpenAI、Ollama，以及任何 OpenAI 兼容网关。
@@ -115,6 +116,7 @@ There is also a green dot in the menu bar. If the text is already on your clipbo
 - Every version carries an expandable explanation naming the words that changed and why.
 - Non-English input is translated into English with the original tone preserved; English input is proofread.
 - The pill appears at the top of whichever display you are working on, follows you across Spaces and full-screen apps, and never steals keyboard focus.
+- It expands only after the pointer rests on it for about 1.2 seconds, so merely passing by never interrupts you.
 - A green dot sits in the menu bar; click it to run on the current clipboard. It turns into a ring while working.
 - Stays visible while working and after the result arrives; it does not disappear on its own.
 - Works with Anthropic, DeepSeek, Kimi, Qwen, Zhipu, Doubao/Volcengine Ark, OpenAI, Ollama, and any OpenAI-compatible gateway.
