@@ -8,7 +8,7 @@
 </head>
 <body>
   <div id="pill" class="pill collapsed">
-    <!-- 收起态：一颗安静的胶囊，只有方向标和一条进度线 -->
+    <!-- 收起态：一颗安静的胶囊 -->
     <div class="bar">
       <span id="dot" class="dot"></span>
       <span id="direction" class="direction"></span>
@@ -19,15 +19,13 @@
 
     <!-- 展开态 -->
     <div id="body" class="body">
+      <!-- 语气切换固定在这里，永远不随正文滚走 -->
+      <div id="tones" class="tones"></div>
+
       <div class="sheet">
-        <!-- 主体：改好的那句话 -->
         <p id="headline" class="headline"></p>
         <p id="source" class="source"></p>
 
-        <!-- 语气切换：纯文字，不做成按钮 -->
-        <div id="tones" class="tones"></div>
-
-        <!-- 为什么这样说 -->
         <div id="why-wrap" class="section">
           <div id="why-label" class="label"></div>
           <div id="why" class="why"></div>
@@ -35,9 +33,9 @@
       </div>
 
       <div class="foot">
+        <button id="btn-close" class="action icon" title="关闭">✕</button>
         <span id="hint" class="hint"></span>
-        <button id="btn-copy" class="action"></button>
-        <button id="btn-close" class="action icon">✕</button>
+        <button id="btn-copy" class="action primary"></button>
       </div>
     </div>
   </div>

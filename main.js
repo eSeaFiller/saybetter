@@ -239,6 +239,10 @@ function createPill() {
     show: false,
     frame: false,
     transparent: true,
+    // 原生毛玻璃。不能用 CSS backdrop-filter —— 那只能模糊页面内部的东西，
+    // 模糊不了窗口背后的桌面内容；真玻璃必须走 macOS 的 vibrancy。
+    vibrancy: 'hud',
+    visualEffectState: 'active',
     resizable: false,
     // 不能设 movable: false —— macOS 上它连 setBounds 的程序化移动一起挡掉，
     // 结果窗口停在默认的「屏幕正中」，永远到不了刘海下面。

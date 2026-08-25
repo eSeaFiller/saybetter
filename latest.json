@@ -1,5 +1,5 @@
 {
-  "version": "0.3.1",
-  "url": "https://github.com/eSeaFiller/saybetter/releases/download/v0.3.1/SayBetter-0.3.1-arm64.dmg",
-  "notes": "浮窗界面重做，改为一句主体加安静的语气切换；鼠标需停留约 1.2 秒才展开，路过不再被打断"
+  "version": "0.3.2",
+  "url": "https://github.com/eSeaFiller/saybetter/releases/download/v0.3.2/SayBetter-0.3.2-arm64.dmg",
+  "notes": "语气切换固定在顶部无需下滑；复制按钮加大提为主按钮；改用 macOS 原生毛玻璃；正文字号随长度自适应"
 }

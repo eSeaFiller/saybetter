@@ -143,6 +143,11 @@ function paint(streaming) {
   }
 
   headline.innerHTML = highlight(sentence, v.why);
+  // 字号随长度自适应：一句话就给足气势，一整段就退到能读下去的尺寸，
+  // 否则长文本会把下面的东西全顶出可视区。
+  const n = sentence.length;
+  headline.className =
+    'headline' + (n > 320 ? ' len-xl' : n > 180 ? ' len-l' : n > 90 ? ' len-m' : '');
   sourceEl.textContent = sourceText;
 
   // 语气切换：纯文字
