@@ -41,7 +41,8 @@ SayBetter 想去掉的就是这二十秒。
 - 鼠标停留约 1.2 秒才展开，只是路过不会被打断。
 - 展开后四种语气固定在顶部，无需滚动即可切换；正文字号随长度自适应。
 - 结果不逐字蹦出：顶部进度条走满 2 秒后一次性揭晓，每次节奏一致。
-- 采用 macOS 原生毛玻璃。
+- 极光渐变与玻璃态：四条色带在玻璃后缓慢漂移（11–16 秒），前景是半透明玻璃卡片加高光描边，叠原生毛玻璃。
+- 顶部保留极光、正文区压深，最坏情况（白色桌面 + 最亮色带）下所有文字仍满足 WCAG 对比度。
 - 菜单栏常驻一颗绿点，点它即可用当前剪贴板内容触发一次；处理中会变成空心圈。
 - 处理中和出结果后浮窗保持显示，不会自行消失。
 - 可接入 Anthropic、DeepSeek、Kimi、通义千问、智谱、豆包/火山方舟、OpenAI、Ollama，以及任何 OpenAI 兼容网关。
@@ -122,7 +123,8 @@ There is also a green dot in the menu bar. If the text is already on your clipbo
 - It expands only after the pointer rests on it for about 1.2 seconds, so merely passing by never interrupts you.
 - The four registers stay pinned at the top — no scrolling needed to switch. Body text scales with length.
 - Results are not streamed word by word: a two-second progress bar fills first, then everything appears at once, so the rhythm is the same every time.
-- Built on native macOS vibrancy.
+- Aurora gradients behind glass: four colour bands drift slowly (11–16s) behind a translucent glass card with a highlight rim, on top of native macOS vibrancy.
+- The aurora stays near the top while the body area is darkened, so every piece of text still clears WCAG contrast even in the worst case (white desktop under the brightest band).
 - A green dot sits in the menu bar; click it to run on the current clipboard. It turns into a ring while working.
 - Stays visible while working and after the result arrives; it does not disappear on its own.
 - Works with Anthropic, DeepSeek, Kimi, Qwen, Zhipu, Doubao/Volcengine Ark, OpenAI, Ollama, and any OpenAI-compatible gateway.

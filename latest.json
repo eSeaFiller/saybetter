@@ -1,5 +1,5 @@
 {
-  "version": "0.3.3",
-  "url": "https://github.com/eSeaFiller/saybetter/releases/download/v0.3.3/SayBetter-0.3.3-arm64.dmg",
-  "notes": "灵动岛加入 2 秒进度条，走满后一次性揭晓结果，不再逐字蹦出"
+  "version": "0.3.4",
+  "url": "https://github.com/eSeaFiller/saybetter/releases/download/v0.3.4/SayBetter-0.3.4-arm64.dmg",
+  "notes": "灵动岛改为极光渐变加玻璃态：四条色带在玻璃后漂移，高光描边与柔和阴影，Hover 提亮描边、Active 缩至 0.98"
 }
