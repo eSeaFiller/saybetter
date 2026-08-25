@@ -14,6 +14,10 @@ const whyEl = $('#why');
 const hint = $('#hint');
 const btnCopy = $('#btn-copy');
 const btnClose = $('#btn-close');
+const progressFill = $('#progress-fill');
+const waitingEl = $('#waiting');
+
+const PROGRESS_MS = 2000; // 进度条走满的时长；走满之前不揭晓结果
 
 let raw = '';
 let variants = [];   // [{ tone, text, why[] }]
@@ -21,6 +25,9 @@ let chosen = 0;
 let expanded = false;
 let pinned = false;
 let sourceText = '';
+let progressDone = false;  // 2 秒进度条是否走完
+let streamDone = false;    // 模型是否已经吐完
+let progressTimer = null;
 let t = (k) => k;
 
 const STRINGS = {
@@ -121,6 +128,37 @@ function renderWhy(lines) {
     .join('');
 }
 
+/* ---------------- 进度与揭晓 ---------------- */
+
+// 结果要等两件事都成立才显示：进度条走满 2 秒，且模型已经吐完。
+// 这样每次的节奏是一致的 —— 不会有时候瞬间蹦出来、有时候等半天。
+function maybeReveal() {
+  if (!progressDone || !streamDone) return;
+  pillEl.classList.remove('working', 'waiting');
+  dot.className = 'dot';
+  paint(false);
+}
+
+function startProgress() {
+  clearTimeout(progressTimer);
+  progressDone = false;
+  streamDone = false;
+
+  // 先归零并强制回流，否则 transition 不会从 0 开始跑
+  progressFill.style.transition = 'none';
+  progressFill.style.width = '0%';
+  void progressFill.offsetWidth;
+  progressFill.style.transition = `width ${PROGRESS_MS}ms linear`;
+  progressFill.style.width = '100%';
+
+  progressTimer = setTimeout(() => {
+    progressDone = true;
+    // 走满了但模型还没回来：原地呼吸，别让人以为卡住了
+    if (!streamDone) pillEl.classList.add('waiting');
+    maybeReveal();
+  }, PROGRESS_MS);
+}
+
 /* ---------------- 渲染 ---------------- */
 
 function paint(streaming) {
@@ -218,21 +256,26 @@ window.pill.onStart(({ language, mode, source }) => {
   btnCopy.textContent = t('copy');
   dot.className = 'dot working';
   pillEl.classList.add('working');
-  pillEl.classList.remove('pinned');
+  pillEl.classList.remove('pinned', 'waiting');
   pinned = false;
+  waitingEl.textContent = t('working');
+  startProgress();
 });
 
-window.pill.onDelta((d) => { raw += d; paint(true); });
+// 只累积不渲染：进度条走满之前一个字都不显示。
+window.pill.onDelta((d) => { raw += d; });
 
 window.pill.onDone(() => {
-  dot.className = 'dot';
-  pillEl.classList.remove('working');
-  paint(false);
+  streamDone = true;
+  pillEl.classList.remove('waiting');
+  maybeReveal();
 });
 
 window.pill.onError((msg) => {
+  clearTimeout(progressTimer);
+  progressDone = streamDone = true;
   dot.className = 'dot error';
-  pillEl.classList.remove('working');
+  pillEl.classList.remove('working', 'waiting');
   headline.innerHTML = `<span style="font-size:14px">${esc(msg)}</span>`;
   sourceEl.textContent = '';
   tonesEl.innerHTML = '';

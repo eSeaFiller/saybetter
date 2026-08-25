@@ -1,5 +1,5 @@
 {
-  "version": "0.3.2",
-  "url": "https://github.com/eSeaFiller/saybetter/releases/download/v0.3.2/SayBetter-0.3.2-arm64.dmg",
-  "notes": "语气切换固定在顶部无需下滑；复制按钮加大提为主按钮；改用 macOS 原生毛玻璃；正文字号随长度自适应"
+  "version": "0.3.3",
+  "url": "https://github.com/eSeaFiller/saybetter/releases/download/v0.3.3/SayBetter-0.3.3-arm64.dmg",
+  "notes": "灵动岛加入 2 秒进度条，走满后一次性揭晓结果，不再逐字蹦出"
 }
