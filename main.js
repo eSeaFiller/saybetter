@@ -247,7 +247,8 @@ function createPill() {
     transparent: true,
     // 原生毛玻璃。不能用 CSS backdrop-filter —— 那只能模糊页面内部的东西，
     // 模糊不了窗口背后的桌面内容；真玻璃必须走 macOS 的 vibrancy。
-    vibrancy: 'hud',
+    // 'popover' 是浅色系材质；页面里再叠一层白，深色模式下也保持浅色。
+    vibrancy: 'popover',
     visualEffectState: 'active',
     resizable: false,
     // 不能设 movable: false —— macOS 上它连 setBounds 的程序化移动一起挡掉，

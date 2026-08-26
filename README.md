@@ -42,8 +42,8 @@ SayBetter 想去掉的就是这二十秒。
 - 展开后四种语气固定在顶部，无需滚动即可切换；正文字号随长度自适应。
 - 右上角状态区显示当前进展：正在看 / 好了 / 已复制 / 已钉住 / 出错，旁边是关闭按钮。
 - 结果不会在你没准备好时蹦出来：要等悬停进度条走满才展开，每次节奏一致。
-- 极光渐变与玻璃态：四条色带在玻璃后缓慢漂移（11–16 秒），前景是半透明玻璃卡片加高光描边，叠原生毛玻璃。
-- 顶部保留极光、正文区压深，最坏情况（白色桌面 + 最亮色带）下所有文字仍满足 WCAG 对比度。
+- 浅色玻璃：白色磨砂面加高光描边，底下几条极淡的色晕缓慢漂移（11–16 秒），叠原生毛玻璃。
+- 色晕只在顶部留一点、正文区几乎纯白，最坏情况（纯黑桌面 + 最浓色晕）下所有文字仍满足 WCAG 对比度。
 - 菜单栏常驻一颗绿点，点它即可用当前剪贴板内容触发一次；处理中会变成空心圈。
 - 绿点的下拉菜单里可以一键「暂停复制翻译」，另有模型设置（`⌘,`）、配置文件夹、查看介绍和退出（`⌘Q`）。
 - 处理中和出结果后浮窗保持显示，不会自行消失。
@@ -126,8 +126,8 @@ There is also a green dot in the menu bar. If the text is already on your clipbo
 - The four registers stay pinned at the top — no scrolling needed to switch. Body text scales with length.
 - A status area in the top-right corner reports progress — working, ready, copied, pinned, or error — next to the close button.
 - Results never appear before you are ready: the hover progress bar must fill first, so the rhythm is the same every time.
-- Aurora gradients behind glass: four colour bands drift slowly (11–16s) behind a translucent glass card with a highlight rim, on top of native macOS vibrancy.
-- The aurora stays near the top while the body area is darkened, so every piece of text still clears WCAG contrast even in the worst case (white desktop under the brightest band).
+- Light frosted glass: a white translucent surface with a highlight rim, over a few very faint colour washes that drift slowly (11–16s), on top of native macOS vibrancy.
+- The washes stay near the top and the body area is nearly white, so every piece of text still clears WCAG contrast even in the worst case (a pure black desktop under the strongest wash).
 - A green dot sits in the menu bar; click it to run on the current clipboard. It turns into a ring while working.
 - Its dropdown menu offers a one-click "pause clipboard translation" toggle, plus model settings (`⌘,`), the config folder, the introduction, and quit (`⌘Q`).
 - Stays visible while working and after the result arrives; it does not disappear on its own.

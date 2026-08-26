@@ -1,5 +1,5 @@
 {
-  "version": "0.4.4",
-  "url": "https://github.com/eSeaFiller/saybetter/releases/download/v0.4.4/SayBetter-0.4.4-arm64.dmg",
-  "notes": "重做菜单栏下拉菜单：新增一键暂停复制翻译，补上模型设置(⌘,)与退出(⌘Q)的可用快捷键，合并了两份重复的菜单构建代码"
+  "version": "0.4.5",
+  "url": "https://github.com/eSeaFiller/saybetter/releases/download/v0.4.5/SayBetter-0.4.5-arm64.dmg",
+  "notes": "灵动岛改为浅色玻璃：白色磨砂面配高光描边，色晕压淡只在顶部留一点，深色文字，简约风格"
 }
