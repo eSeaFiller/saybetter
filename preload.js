@@ -15,6 +15,8 @@ contextBridge.exposeInMainWorld('api', {
   onError: (fn) => ipcRenderer.on('check:error', (_e, m) => fn(m)),
   onShown: (fn) => ipcRenderer.on('panel:shown', (_e, p) => fn(p)),
   onSettings: (fn) => ipcRenderer.on('panel:settings', () => fn()),
+  onIntro: (fn) => ipcRenderer.on('panel:intro', () => fn()),
+  onConfigChanged: (fn) => ipcRenderer.on('config:changed', (_e, c) => fn(c)),
   checkUpdate: () => ipcRenderer.invoke('update:check'),
   openUpdate: () => ipcRenderer.invoke('update:open'),
   onUpdate: (fn) => ipcRenderer.on('update:available', (_e, i) => fn(i)),

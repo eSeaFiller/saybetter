@@ -334,6 +334,14 @@ $('#btn-intro-cover-next').onclick = showIntroCopy;
 $('#btn-intro-copy-next').onclick = showSettings;
 $('#btn-replay-intro').onclick = showIntro;
 window.api.onSettings(showSettings);
+window.api.onIntro(showIntro);
+// 从菜单栏切换了「暂停复制翻译」时，设置页里的勾选状态要跟着变
+window.api.onConfigChanged((c) => {
+  if (c && typeof c.watchClipboard === 'boolean') {
+    const box = $('#f-watch');
+    if (box) box.checked = c.watchClipboard;
+  }
+});
 
 function applyPreset(id, { fillModel } = {}) {
   const p = presets.find((x) => x.id === id);

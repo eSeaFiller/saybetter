@@ -453,46 +453,111 @@ function setTrayBusy(busy) {
   }
 }
 
-function buildTray() {
-  tray = new Tray(trayIcon());
-  tray.setToolTip('SayBetter');
+// 菜单栏下拉菜单。只有一份构建逻辑 —— 之前有两份几乎一样的拷贝，
+// 改一处忘另一处就会不一致。
+function buildTrayMenu() {
+  if (!tray || tray.isDestroyed()) return;
   const cfg = loadConfig();
-  const menu = Menu.buildFromTemplate([
+  const watching = cfg.watchClipboard !== false;
+
+  tray.setContextMenu(Menu.buildFromTemplate([
     ...(updateInfo
       ? [{ label: `有新版本 ${updateInfo.version}，点击下载`, click: () => shell.openExternal(updateInfo.url) },
          { type: 'separator' }]
       : []),
-    { label: `唤出（${cfg.hotkey}）`, click: showPanel },
-    { type: 'separator' },
+
+    { label: '翻译剪贴板内容', accelerator: cfg.hotkey || 'Alt+Space', click: translateClipboardNow },
     {
-      label: '设置…',
+      // 最常用的开关，不该藏在设置页里
+      label: '暂停复制翻译',
+      type: 'checkbox',
+      checked: !watching,
       click: () => {
-        showPanel();
-        send('panel:settings');
+        const next = { ...loadConfig(), watchClipboard: !watching };
+        saveConfig(next);
+        applyClipboardWatch(loadConfig());
+        buildTrayMenu();                     // 勾选状态要立刻反映出来
+        send('config:changed', { watchClipboard: !watching });
       },
     },
-    {
-      label: '打开配置文件夹',
-      click: () => shell.showItemInFolder(CONFIG_PATH()),
-    },
+
     { type: 'separator' },
-    { label: '退出', click: () => { app.exit(0); } },
-  ]);
-  tray.setContextMenu(menu);
-  // 点绿点 = 用当前剪贴板内容直接跑一轮（和复制触发是同一条路）。
-  // 剪贴板里没有可处理的内容时，退回打开输入面板，让你手动敲。
+
+    { label: '模型设置…', accelerator: 'CommandOrControl+,', click: openSettings },
+    { label: '打开配置文件夹', click: () => shell.showItemInFolder(CONFIG_PATH()) },
+
+    { type: 'separator' },
+
+    { label: '查看介绍', click: () => { showPanel(); send('panel:intro'); } },
+    { label: `关于 SayBetter ${app.getVersion()}`, click: () => shell.openExternal(`https://github.com/${REPO}`) },
+
+    { type: 'separator' },
+
+    { label: '退出 SayBetter', accelerator: 'CommandOrControl+Q', click: () => app.quit() },
+  ]));
+}
+
+function openSettings() {
+  showPanel();
+  send('panel:settings');
+}
+
+// 拿当前剪贴板内容跑一轮；没有可处理的内容就打开输入面板
+function translateClipboardNow() {
+  const text = (clipboard.readText() || '').trim();
+  if (shouldWatch(text)) {
+    lastClipboard = clipboard.readText();   // 别让轮询紧接着再触发一次
+    runInPill(text);
+  } else {
+    showPanel();
+  }
+}
+
+// macOS 上托盘菜单里的 accelerator 只是显示用的，不会真的触发。
+// 想让 ⌘, 和 ⌘Q 生效，得有一份真正的应用菜单。
+// 注意：Edit 那一组必须留着，否则设置页里 ⌘V 粘贴 API Key 都会失灵。
+function buildAppMenu() {
+  Menu.setApplicationMenu(Menu.buildFromTemplate([
+    {
+      label: 'SayBetter',
+      submenu: [
+        { label: `关于 SayBetter ${app.getVersion()}`, click: () => shell.openExternal(`https://github.com/${REPO}`) },
+        { type: 'separator' },
+        { label: '模型设置…', accelerator: 'CommandOrControl+,', click: openSettings },
+        { type: 'separator' },
+        { role: 'hide', label: '隐藏 SayBetter' },
+        { role: 'hideOthers', label: '隐藏其他' },
+        { role: 'unhide', label: '全部显示' },
+        { type: 'separator' },
+        { label: '退出 SayBetter', accelerator: 'CommandOrControl+Q', click: () => app.quit() },
+      ],
+    },
+    {
+      label: '编辑',
+      submenu: [
+        { role: 'undo', label: '撤销' },
+        { role: 'redo', label: '重做' },
+        { type: 'separator' },
+        { role: 'cut', label: '剪切' },
+        { role: 'copy', label: '拷贝' },
+        { role: 'paste', label: '粘贴' },
+        { role: 'selectAll', label: '全选' },
+      ],
+    },
+  ]));
+}
+
+function buildTray() {
+  tray = new Tray(trayIcon());
+  tray.setToolTip('SayBetter');
+  buildTrayMenu();
+  // 点绿点 = 直接翻剪贴板里的内容；浮窗已经开着就收起
   tray.on('click', () => {
     if (pillWin && !pillWin.isDestroyed() && pillWin.isVisible()) {
       hidePill();
       return;
     }
-    const text = (clipboard.readText() || '').trim();
-    if (shouldWatch(text)) {
-      lastClipboard = clipboard.readText(); // 别让轮询紧接着再触发一次
-      runInPill(text);
-    } else {
-      showPanel();
-    }
+    translateClipboardNow();
   });
 }
 
@@ -516,32 +581,11 @@ ipcMain.handle('config:get', () => ({ config: loadConfig(), presets: PRESETS }))
 ipcMain.handle('config:set', (_e, cfg) => {
   saveConfig(cfg);
   const r = registerHotkey(cfg.hotkey);
-  if (tray) buildTrayMenuLabel(cfg.hotkey);
+  buildTrayMenu();
   applyClipboardWatch(loadConfig());
   return r;
 });
 
-function buildTrayMenuLabel(hotkey) {
-  const menu = Menu.buildFromTemplate([
-    ...(updateInfo
-      ? [{ label: `有新版本 ${updateInfo.version}，点击下载`, click: () => shell.openExternal(updateInfo.url) },
-         { type: 'separator' }]
-      : []),
-    { label: `唤出（${hotkey}）`, click: showPanel },
-    { type: 'separator' },
-    {
-      label: '设置…',
-      click: () => {
-        showPanel();
-        send('panel:settings');
-      },
-    },
-    { label: '打开配置文件夹', click: () => shell.showItemInFolder(CONFIG_PATH()) },
-    { type: 'separator' },
-    { label: '退出', click: () => app.exit(0) },
-  ]);
-  tray.setContextMenu(menu);
-}
 
 ipcMain.handle('check:run', async (e, { text, tone }) => {
   if (currentAbort) currentAbort.abort();
@@ -578,7 +622,7 @@ ipcMain.handle('update:check', async () => {
   const info = await checkForUpdate(app.getVersion());
   if (info && info.hasUpdate) {
     updateInfo = info;
-    if (tray) buildTrayMenuLabel(loadConfig().hotkey);
+    buildTrayMenu();
   }
   return { current: app.getVersion(), info, repo: REPO };
 });
@@ -630,6 +674,7 @@ app.whenReady().then(() => {
       showPanel({ keepOpen: true });
     }
   }, 1200);
+  buildAppMenu();
   buildTray();
   createPill();
   const cfg = loadConfig();
@@ -642,7 +687,7 @@ app.whenReady().then(() => {
     const info = await checkForUpdate(app.getVersion());
     if (!info || !info.hasUpdate) return;
     updateInfo = info;
-    if (tray) buildTrayMenuLabel(loadConfig().hotkey);
+    buildTrayMenu();
     send('update:available', info);
   };
   setTimeout(runUpdateCheck, 8000);

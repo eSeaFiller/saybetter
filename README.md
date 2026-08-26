@@ -45,6 +45,7 @@ SayBetter 想去掉的就是这二十秒。
 - 极光渐变与玻璃态：四条色带在玻璃后缓慢漂移（11–16 秒），前景是半透明玻璃卡片加高光描边，叠原生毛玻璃。
 - 顶部保留极光、正文区压深，最坏情况（白色桌面 + 最亮色带）下所有文字仍满足 WCAG 对比度。
 - 菜单栏常驻一颗绿点，点它即可用当前剪贴板内容触发一次；处理中会变成空心圈。
+- 绿点的下拉菜单里可以一键「暂停复制翻译」，另有模型设置（`⌘,`）、配置文件夹、查看介绍和退出（`⌘Q`）。
 - 处理中和出结果后浮窗保持显示，不会自行消失。
 - 可接入 Anthropic、DeepSeek、Kimi、通义千问、智谱、豆包/火山方舟、OpenAI、Ollama，以及任何 OpenAI 兼容网关。
 - 自动关闭 DeepSeek、豆包、通义的思考模式，避免响应变慢。
@@ -128,6 +129,7 @@ There is also a green dot in the menu bar. If the text is already on your clipbo
 - Aurora gradients behind glass: four colour bands drift slowly (11–16s) behind a translucent glass card with a highlight rim, on top of native macOS vibrancy.
 - The aurora stays near the top while the body area is darkened, so every piece of text still clears WCAG contrast even in the worst case (white desktop under the brightest band).
 - A green dot sits in the menu bar; click it to run on the current clipboard. It turns into a ring while working.
+- Its dropdown menu offers a one-click "pause clipboard translation" toggle, plus model settings (`⌘,`), the config folder, the introduction, and quit (`⌘Q`).
 - Stays visible while working and after the result arrives; it does not disappear on its own.
 - Works with Anthropic, DeepSeek, Kimi, Qwen, Zhipu, Doubao/Volcengine Ark, OpenAI, Ollama, and any OpenAI-compatible gateway.
 - Automatically disables thinking mode on DeepSeek, Doubao, and Qwen to keep responses fast.
