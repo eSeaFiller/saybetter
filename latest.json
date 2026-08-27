@@ -1,5 +1,5 @@
 {
-  "version": "0.4.5",
-  "url": "https://github.com/eSeaFiller/saybetter/releases/download/v0.4.5/SayBetter-0.4.5-arm64.dmg",
-  "notes": "灵动岛改为浅色玻璃：白色磨砂面配高光描边，色晕压淡只在顶部留一点，深色文字，简约风格"
+  "version": "0.4.6",
+  "url": "https://github.com/eSeaFiller/saybetter/releases/download/v0.4.6/SayBetter-0.4.6-arm64.dmg",
+  "notes": "灵动岛加高到 52px 并改成通透玻璃：收起态不再垫白，展开态才压一层白保证文字读得清；正文配色从中性黑灰换成靛墨；修掉打开时先在屏幕正中闪一帧再跳到刘海下的问题"
 }

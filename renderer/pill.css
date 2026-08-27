@@ -1,15 +1,20 @@
 /* 灵动岛浮窗。克制优先：
-   一个主体（改好的那句话），标签一律小号灰字，发丝线代替卡片，
+   一个主体（改好的那句话），标签一律小号淡墨，发丝线代替卡片，
    颜色只用来标记被改动的词。底子是 macOS 原生毛玻璃。 */
 
 :root {
-  --fg: #16181d;                        /* 主文字：近黑 */
-  --fg-2: rgba(22, 24, 29, 0.72);       /* 次要文字 */
-  --fg-3: rgba(22, 24, 29, 0.52);       /* 标签 */
-  --line: rgba(22, 24, 29, 0.10);       /* 发丝分隔线 */
+  /* 正文不用中性黑灰：整族取自同一个靛蓝墨 —— 淡下去的次要文字会带一点雾蓝，
+     和背后的极光是同一个调子。换配色只要改 --ink 这一行。 */
+  --ink: 34, 42, 69;
+
+  --fg: rgb(var(--ink));                /* 主文字：靛墨 */
+  --fg-2: rgba(var(--ink), 0.76);       /* 次要文字 */
+  --fg-3: rgba(var(--ink), 0.56);       /* 标签 */
+  --line: rgba(var(--ink), 0.12);       /* 发丝分隔线 */
+  --was: rgba(var(--ink), 0.48);        /* 原来的说法：弱，但仍须读得出来 */
+
   --accent: #2f6fed;
-  --changed: #a4560a;                   /* 被改动的词：琥珀，在浅底上要压深才读得清 */
-  --was: rgba(22, 24, 29, 0.50);        /* 原来的说法：弱，但仍须读得出来 */
+  --changed: #9a5410;                   /* 被改动的词：琥珀，压深才在浅底上读得清 */
   --bad: #c0392b;
 }
 
@@ -32,12 +37,18 @@ html, body {
 .pill {
   position: relative;
   height: 100%;
-  background: rgba(255, 255, 255, 0.78);
-  border: 1px solid rgba(255, 255, 255, 0.6);
+  /* 收起态更透（玻璃感），展开态更白（保证长文可读）—— 下面按状态覆盖 */
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.55);
   border-top: 0;
-  border-radius: 0 0 18px 18px;
+  border-radius: 0 0 22px 22px;
   overflow: hidden;
   isolation: isolate;
+  transition: background 220ms cubic-bezier(0.25, 0.6, 0.3, 1);
+}
+.pill.expanded {
+  background: rgba(255, 255, 255, 0.78);
+  border-radius: 0 0 18px 18px;
 }
 
 /* ---- 极光 ---- */
@@ -83,13 +94,8 @@ html, body {
 
 /* ---- 玻璃面 ---- */
 
-.glass {
-  position: relative;
-  z-index: 2;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  /* 顶部略透让色晕露一点，往下逐渐加白 —— 正文落在几乎纯白的区域。 */
+.pill.expanded .glass {
+  /* 展开后正文多，往下逐渐加白，让长段落落在几乎纯白的区域 */
   background: linear-gradient(
     180deg,
     rgba(255, 255, 255, 0.30) 0%,
@@ -97,34 +103,51 @@ html, body {
     rgba(255, 255, 255, 0.74) 46%,
     rgba(255, 255, 255, 0.82) 100%
   );
-  backdrop-filter: blur(22px) saturate(150%);
-  -webkit-backdrop-filter: blur(22px) saturate(150%);
+}
+
+.glass {
+  position: relative;
+  z-index: 2;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  /* 顶部略透让色晕露一点，往下逐渐加白 —— 正文落在几乎纯白的区域。 */
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.10));
+  backdrop-filter: blur(26px) saturate(165%);
+  -webkit-backdrop-filter: blur(26px) saturate(165%);
   border-radius: inherit;
   /* 上缘一道高光切面，下缘一点内阴影，做出悬浮的厚度 */
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.9),
-    inset 0 -1px 0 rgba(22, 24, 29, 0.05),
-    0 14px 34px rgba(22, 24, 29, 0.16);
+    inset 0 -1px 0 rgba(var(--ink), 0.05),
+    0 14px 34px rgba(var(--ink), 0.16);
 }
 
 /* ---- 收起态 ---- */
 
 .bar {
   position: relative;
-  /* 极光最亮的一段正好在顶部，这里垫一层局部暗底，否则方向标读不清 */
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.60), rgba(255, 255, 255, 0.38));
+  /* 收起态：不垫白，让它是一颗真正通透的玻璃胶囊。 */
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.20));
   flex: none;
-  height: 34px;
+  height: 44px;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 15px;
+  gap: 9px;
+  padding: 0 17px;
 }
+/* 展开态：极光最亮的一段正好在顶部，这里补一层局部白底压住色晕，
+   否则方向标和右上角状态读不清。（收起态没有这个问题：那一行只有
+   方向标和一截很淡的预览，通透比压白重要。） */
+.pill.expanded .bar {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.60), rgba(255, 255, 255, 0.38));
+}
+
 .spacer { flex: 1; }
 
 .dot {
   flex: none;
-  width: 7px; height: 7px;
+  width: 8px; height: 8px;
   border-radius: 50%;
   background: #22a04c;
 }
@@ -132,16 +155,16 @@ html, body {
 .dot.error { background: var(--bad); animation: none; }
 @keyframes breathe { 50% { opacity: 0.3; } }
 
-.direction { flex: none; font-size: 12px; color: var(--fg-2); letter-spacing: 0.02em; }
+.direction { flex: none; font-size: 12.5px; font-weight: 500; color: var(--fg-2); letter-spacing: 0.02em; }
 
 .peek {
   min-width: 0;
-  font-size: 12px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   text-align: right;
   color: var(--fg-3);
+  font-size: 12.5px;
 }
 .pill.expanded .peek,
 .pill.expanded .progress { display: none; }
@@ -176,8 +199,8 @@ html, body {
   font-size: 11px;
   line-height: 1;
   color: var(--fg-3);
-  background: rgba(22, 24, 29, 0.05);
-  border: 1px solid rgba(22, 24, 29, 0.10);
+  background: rgba(var(--ink), 0.05);
+  border: 1px solid rgba(var(--ink), 0.10);
   border-radius: 6px;
   cursor: pointer;
   transition:
@@ -188,8 +211,8 @@ html, body {
 }
 .hdr-btn:hover {
   color: var(--fg);
-  background: rgba(22, 24, 29, 0.10);
-  border-color: rgba(22, 24, 29, 0.20);
+  background: rgba(var(--ink), 0.10);
+  border-color: rgba(var(--ink), 0.20);
 }
 .hdr-btn:active { transform: scale(0.92); }
 
@@ -198,9 +221,9 @@ html, body {
 .progress {
   flex: none;
   height: 3px;
-  margin: 0 10px 3px;
+  margin: 0 14px 5px;
   border-radius: 2px;
-  background: rgba(22, 24, 29, 0.10);
+  background: rgba(var(--ink), 0.10);
   overflow: hidden;
   opacity: 0;
   transition: opacity 160ms ease-out;
@@ -234,7 +257,7 @@ html, body {
   font: inherit;
   font-size: 12.5px;
   /* 比一般次要文字亮一档：这是四个可点的选项，淡到看不清就等于只有一个 */
-  color: rgba(22, 24, 29, 0.62);
+  color: rgba(var(--ink), 0.62);
   cursor: pointer;
   position: relative;
   transition: color 0.12s;
@@ -312,14 +335,14 @@ html, body {
 .action {
   flex: none;
   background: rgba(255, 255, 255, 0.72);
-  border: 1px solid rgba(22, 24, 29, 0.12);
+  border: 1px solid rgba(var(--ink), 0.12);
   color: var(--fg-2);
   border-radius: 9px;
   padding: 6px 12px;
   font: inherit;
   font-size: 12px;
   cursor: pointer;
-  box-shadow: 0 1px 2px rgba(22, 24, 29, 0.06);
+  box-shadow: 0 1px 2px rgba(var(--ink), 0.06);
   transition:
     background 200ms cubic-bezier(0.25, 0.6, 0.3, 1),
     border-color 200ms cubic-bezier(0.25, 0.6, 0.3, 1),
@@ -330,13 +353,13 @@ html, body {
 .action:hover {
   color: var(--fg);
   background: #fff;
-  border-color: rgba(22, 24, 29, 0.22);
-  box-shadow: 0 4px 12px rgba(22, 24, 29, 0.12);
+  border-color: rgba(var(--ink), 0.22);
+  box-shadow: 0 4px 12px rgba(var(--ink), 0.12);
 }
 /* Active 收敛：缩到 0.98 并把阴影收回去，做出按下去的感觉 */
 .action:active {
   transform: scale(0.98);
-  box-shadow: inset 0 1px 2px rgba(22, 24, 29, 0.14);
+  box-shadow: inset 0 1px 2px rgba(var(--ink), 0.14);
 }
 .action.icon { padding: 6px 10px; color: var(--fg-3); }
 
@@ -369,7 +392,7 @@ html, body {
 .pill.collapsed .bar { cursor: pointer; }
 
 ::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-thumb { background: rgba(22, 24, 29, 0.18); border-radius: 3px; }
+::-webkit-scrollbar-thumb { background: rgba(var(--ink), 0.18); border-radius: 3px; }
 
 /* 结果还没回来就展开了（模型比悬停还慢）：正文让位，只留一句提示 */
 .pill.working .tones,

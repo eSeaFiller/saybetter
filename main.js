@@ -35,7 +35,7 @@ const DEFAULT_CONFIG = {
 
 // 灵动岛浮窗尺寸
 const PILL_W = 260;
-const PILL_H = 40;  // 34 的文字行 + 下沿 6px 容纳悬停进度条
+const PILL_H = 52;  // 44 的文字行 + 下沿 8px 容纳悬停进度条
 const PILL_EXPANDED_W = 440;
 const PILL_EXPANDED_H = 380;
 const CLIPBOARD_POLL_MS = 400;
@@ -361,9 +361,19 @@ async function runInPill(text) {
   pillExpanded = false;
   pillPinned = false;
   pillSend('pill:expanded', false);
+  // 先摆好再显示 —— 否则窗口会先在上一次的位置（首次是屏幕正中）闪一帧再跳过来。
+  positionPill(PILL_W, PILL_H);
   pillWin.showInactive();
   keepPillEverywhere();
+  // 显示后再摆一次：窗口还隐藏时设的 bounds 在 macOS 上不一定生效。
   positionPill(PILL_W, PILL_H);
+  // 再补一次，兜住系统的异步重排（切空间、接显示器时容易发生）。
+  setTimeout(() => {
+    if (pillWin && !pillWin.isDestroyed() && pillWin.isVisible() && !pillExpanded) {
+      keepPillEverywhere();
+      positionPill(PILL_W, PILL_H);
+    }
+  }, 250);
   startCursorWatch();
 
   if (pillAbort) pillAbort.abort();
