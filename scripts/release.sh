@@ -11,9 +11,12 @@ URL="https://github.com/eSeaFiller/saybetter/releases/download/v${VERSION}/SayBe
 
 # 1) 写版本号
 node -e "
-const fs=require('fs'); const p='package.json';
-const d=JSON.parse(fs.readFileSync(p)); d.version='${VERSION}';
-fs.writeFileSync(p, JSON.stringify(d,null,2)+'\n');
+const fs=require('fs');
+for (const p of ['package.json', 'package-lock.json']) {
+  const d=JSON.parse(fs.readFileSync(p)); d.version='${VERSION}';
+  if (p === 'package-lock.json' && d.packages && d.packages['']) d.packages[''].version='${VERSION}';
+  fs.writeFileSync(p, JSON.stringify(d,null,2)+'\n');
+}
 "
 
 # 2) 打包前自检：运行时要加载的文件必须都在 files 白名单里

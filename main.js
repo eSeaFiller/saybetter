@@ -10,6 +10,7 @@ const {
   clipboard,
   safeStorage,
   nativeImage,
+  Notification,
   shell,
   screen,
 } = require('electron');
@@ -19,6 +20,8 @@ const { PRESETS, streamCheck } = require('./providers');
 const { checkForUpdate, CHECK_INTERVAL_MS, REPO } = require('./updater');
 
 const CONFIG_PATH = () => path.join(app.getPath('userData'), 'config.json');
+const UI_STATE_PATH = () => path.join(app.getPath('userData'), 'ui-state.json');
+const STARTUP_LOG_PATH = () => path.join(app.getPath('userData'), 'startup.log');
 const LEGACY_CONFIG_PATHS = () => [
   path.join(app.getPath('appData'), 'wo-shuo-de-dui-ma', 'config.json'),
   path.join(app.getPath('appData'), '我说的对吗', 'config.json'),
@@ -64,6 +67,20 @@ let cursorTimer = null;
 let pillPinned = false; // 点过之后钉住，移开也不收
 let hoverTimer = null;  // 悬停计时：进入后要停够 HOVER_DELAY_MS 才展开
 let updateInfo = null;  // 查到的新版本，null = 没有/没查到
+let pillPlacement = null; // 用户拖动后的相对位置，跨分辨率恢复
+let introductionSeen = false;
+let pillProgrammaticMove = false;
+let pillMoveGuardTimer = null;
+let trayFallbackDone = false;  // 菜单栏没位置时只回退一次
+
+function startupLog(message) {
+  try {
+    fs.mkdirSync(path.dirname(STARTUP_LOG_PATH()), { recursive: true });
+    fs.appendFileSync(STARTUP_LOG_PATH(), `${new Date().toISOString()} ${message}\n`);
+  } catch {
+    // 诊断日志不能影响应用启动。
+  }
+}
 
 /* ---------------- config（key 用系统钥匙串加密后落盘） ---------------- */
 
@@ -115,6 +132,34 @@ function saveConfig(cfg) {
   fs.writeFileSync(CONFIG_PATH(), JSON.stringify(out, null, 2), { mode: 0o600 });
 }
 
+function loadUIState() {
+  try {
+    const raw = JSON.parse(fs.readFileSync(UI_STATE_PATH(), 'utf8'));
+    const p = raw && raw.pillPlacement;
+    return {
+      pillPlacement: p && Number.isFinite(p.centerX) && Number.isFinite(p.topY)
+        ? {
+            displayId: String(p.displayId || ''),
+            centerX: Math.min(1, Math.max(0, p.centerX)),
+            topY: Math.min(1, Math.max(0, p.topY)),
+          }
+        : null,
+      introductionSeen: raw.introductionSeen === true,
+    };
+  } catch {
+    return { pillPlacement: null, introductionSeen: false };
+  }
+}
+
+function saveUIState() {
+  try {
+    fs.mkdirSync(path.dirname(UI_STATE_PATH()), { recursive: true });
+    fs.writeFileSync(UI_STATE_PATH(), JSON.stringify({ pillPlacement, introductionSeen }, null, 2), { mode: 0o600 });
+  } catch {
+    // 位置记忆失败不能影响翻译主流程。
+  }
+}
+
 /* ---------------- window ---------------- */
 
 function createWindow() {
@@ -142,7 +187,10 @@ function createWindow() {
     while (pendingSends.length) win.webContents.send(...pendingSends.shift());
     if (showOnLaunch) {
       showOnLaunch = false;
-      setTimeout(() => showPanel({ keepOpen: true }), 150);
+      setTimeout(() => {
+        send('panel:intro');
+        showPanel({ keepOpen: true });
+      }, 150);
     }
   });
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
@@ -214,16 +262,60 @@ function togglePanel() {
 
 /* ---------------- 灵动岛浮窗 ---------------- */
 
-// 放在主屏顶部正中、菜单栏正下方 —— 刘海机上刘海本身是物理黑块，
-// 窗口盖上去会被挡住，所以贴着它的下沿。
+function clamp(n, lo, hi) {
+  return Math.min(Math.max(n, lo), Math.max(lo, hi));
+}
+
+function displayForPlacement() {
+  if (pillPlacement) {
+    const saved = screen.getAllDisplays().find((d) => String(d.id) === pillPlacement.displayId);
+    if (saved) return saved;
+  }
+  return screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+}
+
+// 默认放在当前屏幕顶部正中。用户拖动过之后，用屏幕内的相对位置恢复，
+// 即使分辨率或显示器排列变了也不会飘出屏幕。
 function positionPill(w, h) {
   if (!pillWin || pillWin.isDestroyed()) return;
-  // 放在「你正在用的那块屏」顶端，而不是写死主屏 —— 否则你在外接屏上敲字，
-  // 浮窗却弹在笔记本屏幕上，看起来就像"只在某一个桌面才有"。
-  const d = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
-  const x = Math.round(d.bounds.x + (d.bounds.width - w) / 2);
-  const y = Math.round(d.workArea.y); // workArea.y 已经把菜单栏/刘海让开
+  const d = displayForPlacement();
+  const area = d.bounds;
+  let x;
+  let y;
+  if (pillPlacement) {
+    x = Math.round(area.x + area.width * pillPlacement.centerX - w / 2);
+    y = Math.round(area.y + area.height * pillPlacement.topY);
+  } else {
+    x = Math.round(area.x + (area.width - w) / 2);
+    y = Math.round(d.workArea.y); // 让开菜单栏/刘海
+  }
+  x = clamp(x, area.x + 8, area.x + area.width - w - 8);
+  y = clamp(y, area.y + 8, area.y + area.height - h - 8);
+
+  pillProgrammaticMove = true;
+  if (pillMoveGuardTimer) clearTimeout(pillMoveGuardTimer);
   pillWin.setBounds({ x, y, width: w, height: h });
+  pillMoveGuardTimer = setTimeout(() => { pillProgrammaticMove = false; }, 120);
+}
+
+function rememberPillPosition() {
+  if (!pillWin || pillWin.isDestroyed() || pillProgrammaticMove) return;
+  const b = pillWin.getBounds();
+  const d = screen.getDisplayMatching(b);
+  pillPlacement = {
+    displayId: String(d.id),
+    centerX: (b.x + b.width / 2 - d.bounds.x) / d.bounds.width,
+    topY: (b.y - d.bounds.y) / d.bounds.height,
+  };
+  saveUIState();
+}
+
+function resetPillPosition() {
+  pillPlacement = null;
+  saveUIState();
+  if (pillWin && !pillWin.isDestroyed()) {
+    positionPill(pillExpanded ? PILL_EXPANDED_W : PILL_W, pillExpanded ? PILL_EXPANDED_H : PILL_H);
+  }
 }
 
 // 让浮窗跟着你走：所有桌面（Space）、全屏应用之上都能看到。
@@ -242,12 +334,14 @@ function createPill() {
   pillWin = new BrowserWindow({
     width: PILL_W,
     height: PILL_H,
+    type: 'panel',
     show: false,
     frame: false,
     transparent: true,
     // 原生毛玻璃。不能用 CSS backdrop-filter —— 那只能模糊页面内部的东西，
     // 模糊不了窗口背后的桌面内容；真玻璃必须走 macOS 的 vibrancy。
     // 'popover' 是浅色系材质；页面里再叠一层白，深色模式下也保持浅色。
+    // popover 是语义材质，会随 macOS 浅色/深色外观自适应。
     vibrancy: 'popover',
     visualEffectState: 'active',
     resizable: false,
@@ -260,6 +354,7 @@ function createPill() {
     // 浮窗永远是非活动的（你人在别的 app 里），不开这个就永远点不动。
     acceptFirstMouse: true,
     skipTaskbar: true,
+    hiddenInMissionControl: true,
     hasShadow: true,
     fullscreenable: false,
     webPreferences: {
@@ -269,6 +364,7 @@ function createPill() {
     },
   });
   keepPillEverywhere(); // screen-saver 层级 + 所有桌面可见
+  pillWin.on('moved', rememberPillPosition);
   pillWin.loadFile(path.join(__dirname, 'renderer', 'pill.html'));
 }
 
@@ -446,19 +542,20 @@ function applyClipboardWatch(cfg) {
 
 /* ---------------- tray ---------------- */
 
-// 菜单栏那颗绿点。必须是 PNG —— nativeImage 在 macOS 上不认 SVG。
-// 这里刻意不设 setTemplateImage：模板图会被系统按明暗主题重绘成黑白，
-// 绿色就没了。绿点本身在深浅菜单栏下都够清楚。
+// 菜单栏用单色模板符号，macOS 会根据菜单栏背景自动反色。
 function trayIcon(busy = false) {
-  const file = busy ? 'trayDotBusy.png' : 'trayDot.png';
-  return nativeImage.createFromPath(path.join(__dirname, file));
+  const file = busy ? 'traySayBetterBusyTemplate.png' : 'traySayBetterTemplate.png';
+  const image = nativeImage.createFromPath(path.join(__dirname, file));
+  image.setTemplateImage(true);
+  return image;
 }
 
-// 正在处理时把实心点换成空心圈，给一个"它在干活"的信号
+// 忙碌态仍用同尺寸模板符号，避免菜单栏宽度在处理时跳动。
 function setTrayBusy(busy) {
   if (!tray || tray.isDestroyed()) return;
   try {
     tray.setImage(trayIcon(busy));
+    tray.setToolTip(busy ? 'SayBetter 正在处理' : 'SayBetter');
   } catch {
     /* 托盘可能已销毁 */
   }
@@ -470,6 +567,9 @@ function buildTrayMenu() {
   if (!tray || tray.isDestroyed()) return;
   const cfg = loadConfig();
   const watching = cfg.watchClipboard !== false;
+  const provider = PRESETS.find((p) => p.id === cfg.providerId);
+  const keyReady = cfg.providerId === 'ollama' || Boolean((cfg.apiKey || '').trim());
+  const keyStatus = keyReady ? '已配置' : '未配置';
 
   tray.setContextMenu(Menu.buildFromTemplate([
     ...(updateInfo
@@ -494,12 +594,17 @@ function buildTrayMenu() {
 
     { type: 'separator' },
 
-    { label: '模型设置…', accelerator: 'CommandOrControl+,', click: openSettings },
+    { label: 'Introduction / 使用介绍…', click: openIntroduction },
+    {
+      label: `API Key · ${keyStatus}${provider ? ` · ${provider.label}` : ''}…`,
+      click: openApiKeySettings,
+    },
+    { label: '偏好设置…', accelerator: 'CommandOrControl+,', click: openSettings },
+    { label: '将浮窗放回屏幕顶部', click: resetPillPosition },
     { label: '打开配置文件夹', click: () => shell.showItemInFolder(CONFIG_PATH()) },
 
     { type: 'separator' },
 
-    { label: '查看介绍', click: () => { showPanel(); send('panel:intro'); } },
     { label: `关于 SayBetter ${app.getVersion()}`, click: () => shell.openExternal(`https://github.com/${REPO}`) },
 
     { type: 'separator' },
@@ -509,8 +614,18 @@ function buildTrayMenu() {
 }
 
 function openSettings() {
-  showPanel();
   send('panel:settings');
+  showPanel({ keepOpen: true });
+}
+
+function openApiKeySettings() {
+  send('panel:api-key');
+  showPanel({ keepOpen: true });
+}
+
+function openIntroduction() {
+  send('panel:intro');
+  showPanel({ keepOpen: true });
 }
 
 // 拿当前剪贴板内容跑一轮；没有可处理的内容就打开输入面板
@@ -534,7 +649,9 @@ function buildAppMenu() {
       submenu: [
         { label: `关于 SayBetter ${app.getVersion()}`, click: () => shell.openExternal(`https://github.com/${REPO}`) },
         { type: 'separator' },
-        { label: '模型设置…', accelerator: 'CommandOrControl+,', click: openSettings },
+        { label: 'Introduction / 使用介绍…', click: openIntroduction },
+        { label: 'API Key…', click: openApiKeySettings },
+        { label: '偏好设置…', accelerator: 'CommandOrControl+,', click: openSettings },
         { type: 'separator' },
         { role: 'hide', label: '隐藏 SayBetter' },
         { role: 'hideOthers', label: '隐藏其他' },
@@ -559,17 +676,48 @@ function buildAppMenu() {
 }
 
 function buildTray() {
-  tray = new Tray(trayIcon());
+  const icon = trayIcon();
+  startupLog(`tray icon empty=${icon.isEmpty()} size=${JSON.stringify(icon.getSize())}`);
+  tray = new Tray(icon);
+  // 不设 setTitle：状态项宽度 = 图标宽度 + 16pt，加上文字要占 100pt，
+  // 菜单栏排满时根本挤不进去（刘海底下 macOS 不会放状态项）。纯图标只要 24pt。
   tray.setToolTip('SayBetter');
   buildTrayMenu();
-  // 点绿点 = 直接翻剪贴板里的内容；浮窗已经开着就收起
-  tray.on('click', () => {
-    if (pillWin && !pillWin.isDestroyed() && pillWin.isVisible()) {
-      hidePill();
-      return;
-    }
-    translateClipboardNow();
-  });
+  setTimeout(checkTrayPlaced, 500);
+  setTimeout(checkTrayPlaced, 3000);   // 有的第三方菜单栏管理器会晚一步重排
+  // 使用 macOS 标准状态项行为：左击展开菜单，常用操作放在第一项。
+}
+
+// 菜单栏塞满时，macOS 既不报错也不显示图标，只是不给这个状态项分配位置——
+// 此时 getBounds() 返回的不是菜单栏里的坐标。真放上去了 y 应该贴着屏幕顶部。
+function trayIsPlaced() {
+  if (!tray || tray.isDestroyed()) return false;
+  const b = tray.getBounds();
+  return b.width > 0 && b.y < 40;
+}
+
+function checkTrayPlaced() {
+  if (!tray || tray.isDestroyed() || trayFallbackDone) return;
+  if (trayIsPlaced()) {
+    startupLog(`tray ready bounds=${JSON.stringify(tray.getBounds())}`);
+    return;
+  }
+  startupLog(`tray NOT placed bounds=${JSON.stringify(tray.getBounds())} —— 菜单栏没空位，回退到程序坞`);
+  trayFallbackDone = true;
+  // 否则用户除了快捷键就没有任何入口了。
+  if (process.platform === 'darwin') {
+    app.setActivationPolicy('regular');
+    if (app.dock) app.dock.show();
+  }
+  try {
+    const n = new Notification({
+      title: 'SayBetter 已在后台运行',
+      body: '菜单栏没有空位放图标，已改从程序坞进入。腾出菜单栏空间后重启即可恢复。',
+      silent: true,
+    });
+    n.on('click', () => showPanel());
+    n.show();
+  } catch { /* 通知失败不影响主功能 */ }
 }
 
 /* ---------------- hotkey ---------------- */
@@ -643,6 +791,10 @@ ipcMain.handle('update:open', () => {
 
 ipcMain.handle('panel:hide', () => hidePanel());
 ipcMain.handle('panel:allow-blur', () => { keepPanelOpen = false; });
+ipcMain.handle('intro:complete', () => {
+  introductionSeen = true;
+  saveUIState();
+});
 ipcMain.handle('clipboard:write', (_e, t) => {
   selfWrote = t || '';
   clipboard.writeText(t);
@@ -674,14 +826,22 @@ ipcMain.on('pill:copy', (_e, t) => {
 /* ---------------- lifecycle ---------------- */
 
 app.whenReady().then(() => {
-  // 保留 Dock 图标：可以从程序坞打开，也让 ⌘Q 有个正经的退出入口。
-  // （早期版本这里是 app.dock.hide()，结果正式包里托盘图标又不显示，
-  //   用户就没有任何可见入口了。）
-  if (process.platform === 'darwin' && app.dock) app.dock.show();
+  startupLog(`ready version=${app.getVersion()} platform=${process.platform}`);
+  // 像 PhrasePeek 一样成为真正的菜单栏应用：没有 Dock 图标，也不会在切换
+  // Space/全屏时把自己拉成前台普通应用。设置和退出都从菜单栏进入。
+  if (process.platform === 'darwin') {
+    app.setActivationPolicy('accessory');
+    if (app.dock) app.dock.hide();
+  }
+  const uiState = loadUIState();
+  pillPlacement = uiState.pillPlacement;
+  introductionSeen = uiState.introductionSeen;
+  showOnLaunch = !introductionSeen;
   createWindow();
   setTimeout(() => {
     if (showOnLaunch && win && !win.isDestroyed()) {
       showOnLaunch = false;
+      send('panel:intro');
       showPanel({ keepOpen: true });
     }
   }, 1200);

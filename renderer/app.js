@@ -5,8 +5,6 @@ const input = $('#input');
 const result = $('#result');
 const status = $('#status');
 const viewIntro = $('#view-intro');
-const introCoverPage = $('#intro-cover-page');
-const introCopyPage = $('#intro-copy-page');
 const viewMain = $('#view-main');
 const viewSettings = $('#view-settings');
 
@@ -18,6 +16,7 @@ let lastCopied = ''; // 自己写进剪贴板的东西，别再当成新输入�
 let copiedThisRun = false;
 let presets = [];
 let language = 'zh';
+let externalViewRequested = false;
 
 const LOCALES = {
   zh: {
@@ -308,32 +307,35 @@ function showMain() {
   input.focus();
 }
 function showIntro() {
+  externalViewRequested = true;
   viewMain.hidden = true;
   viewSettings.hidden = true;
   viewIntro.hidden = false;
-  introCoverPage.hidden = false;
-  introCopyPage.hidden = true;
   input.blur();
-  $('#btn-intro-cover-next').focus();
-}
-function showIntroCopy() {
-  introCoverPage.hidden = true;
-  introCopyPage.hidden = false;
-  $('#btn-intro-copy-next').focus();
+  $('#btn-intro-start').focus();
 }
 function showSettings() {
+  externalViewRequested = true;
   viewIntro.hidden = true;
   viewMain.hidden = true;
   viewSettings.hidden = false;
   $('#f-provider').focus();
 }
+function showApiKeySettings() {
+  showSettings();
+  const field = $('#field-api-key');
+  field.classList.remove('api-key-focus');
+  requestAnimationFrame(() => field.classList.add('api-key-focus'));
+  $('#f-key').focus();
+}
 
 $('#btn-settings').onclick = showSettings;
 $('#btn-back').onclick = showMain;
-$('#btn-intro-cover-next').onclick = showIntroCopy;
-$('#btn-intro-copy-next').onclick = showSettings;
+$('#btn-intro-later').onclick = async () => { await window.api.completeIntro(); showMain(); };
+$('#btn-intro-start').onclick = async () => { await window.api.completeIntro(); showApiKeySettings(); };
 $('#btn-replay-intro').onclick = showIntro;
 window.api.onSettings(showSettings);
+window.api.onApiKey(showApiKeySettings);
 window.api.onIntro(showIntro);
 // 从菜单栏切换了「暂停复制翻译」时，设置页里的勾选状态要跟着变
 window.api.onConfigChanged((c) => {
@@ -435,5 +437,5 @@ window.api.onUpdate((info) => {
   $('#f-hotkey').value = config.hotkey || 'Alt+Space';
   $('#f-watch').checked = config.watchClipboard !== false;
   window.api.checkUpdate().then((r) => { if (r) paintUpdate(r); }).catch(() => {});
-  showIntro();
+  if (!externalViewRequested) showMain();
 })();

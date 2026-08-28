@@ -20,7 +20,7 @@
 
 SayBetter 想去掉的就是这二十秒。
 
-它常驻在后台，监听你的剪贴板。你在任何地方选中文字按 `⌘C`，屏幕顶端刘海下方就会浮出一颗胶囊并立刻开始翻译。把鼠标移上去，胶囊下沿会走一条约 1 秒的进度条，走满就展开结果：
+它常驻在后台，监听你的剪贴板。你在任何地方选中文字按 `⌘C`，屏幕顶端会浮出一颗胶囊并立刻开始翻译。默认位置在刘海下方，也可以拖到屏幕任意位置，应用会记住。把鼠标移上去，胶囊下沿会走一条约 1 秒的进度条，走满就展开结果：
 
 - 复制的是中文或任何非英文，它翻译成英文，并保留你原话的语气和正式程度——原文直白就保持直白，原文客气就保持客气。
 - 复制的是英文，它检查语法、改得更地道。
@@ -29,7 +29,7 @@ SayBetter 想去掉的就是这二十秒。
 
 它不打断你。浮窗不抢焦点，你可以继续打字；不把鼠标移上去它就只是一颗安静的胶囊；移上去才展开。换到别的桌面、进了全屏应用，它都跟着你。
 
-菜单栏里还有一颗绿点。手上已经复制好了内容、只是想再看一遍，点它就行。
+菜单栏里的 `S` 是 SayBetter 的控制中心。可以处理当前剪贴板、暂停监听、查看 API Key 状态、重新打开 Introduction，或进入偏好设置。
 
 ### 功能
 
@@ -42,15 +42,16 @@ SayBetter 想去掉的就是这二十秒。
 - 展开后四种语气固定在顶部，无需滚动即可切换；正文字号随长度自适应。
 - 右上角状态区显示当前进展：正在看 / 好了 / 已复制 / 已钉住 / 出错，旁边是关闭按钮。
 - 结果不会在你没准备好时蹦出来：要等悬停进度条走满才展开，每次节奏一致。
-- 浅色玻璃：白色磨砂面加高光描边，底下几条极淡的色晕缓慢漂移（11–16 秒），叠原生毛玻璃。
-- 色晕只在顶部留一点、正文区几乎纯白，最坏情况（纯黑桌面 + 最浓色晕）下所有文字仍满足 WCAG 对比度。
-- 菜单栏常驻一颗绿点，点它即可用当前剪贴板内容触发一次；处理中会变成空心圈。
-- 绿点的下拉菜单里可以一键「暂停复制翻译」，另有模型设置（`⌘,`）、配置文件夹、查看介绍和退出（`⌘Q`）。
+- 原生 macOS popover 材质：自动跟随系统浅色/深色模式、减少透明度和提高对比度设置。
+- 颜色只用于状态、改动词和主操作；内容层使用系统语义层级，避免固定浅色背景在 Dark Mode 中刺眼。
+- 菜单栏常驻一个随系统反色的 `S` 符号，处理中用同尺寸忙碌状态图标，不会让菜单栏跳动。
+- 菜单里可以翻译当前剪贴板、暂停复制翻译、查看 API Key 配置状态、重置浮窗位置，另有 Introduction、偏好设置（`⌘,`）、配置文件夹和退出（`⌘Q`）。
+- Introduction 仅在首次打开时自动出现，之后可随时从菜单栏重新查看；其 API Key 按钮会直接聚焦到对应设置项。
 - 处理中和出结果后浮窗保持显示，不会自行消失。
 - 可接入 Anthropic、DeepSeek、Kimi、通义千问、智谱、豆包/火山方舟、OpenAI、Ollama，以及任何 OpenAI 兼容网关。
 - 自动关闭 DeepSeek、豆包、通义的思考模式，避免响应变慢。
 - 界面支持中文、English、Tiếng Việt、Bahasa Indonesia、ไทย、Bahasa Melayu。
-- 保留在程序坞，点击图标可随时唤出面板。
+- 纯菜单栏应用，不占用程序坞；浮窗是原生 panel 窗口，可拖动、记住位置，并显示在所有 Space 和全屏应用之上。
 - 另有全局快捷键面板（默认 `⌥Space`）用于手动输入。
 
 ### 安装
@@ -64,7 +65,7 @@ SayBetter 想去掉的就是这二十秒。
    ```
 
    回车后需要输入开机密码，输入时屏幕不显示字符属于正常现象。该命令只作用于 SayBetter，不改动任何系统设置。
-4. 打开应用，点两次「下一步」进入设置页。
+4. 首次打开会显示 Introduction，点击「配置 API Key」进入对应设置项。
 5. 填写服务商和 API Key（模型会自动带出推荐值），保存即可开始使用。
 
 每次更新到新版本后，需要重复第 2、3 步；已有配置不会丢失。
@@ -104,7 +105,7 @@ So you open a browser, switch to some AI tool, sign in, copy, paste, wait, and c
 
 SayBetter exists to remove those twenty seconds.
 
-It sits in the background watching your clipboard. Press `⌘C` anywhere and a pill drops down from the top of the screen and starts translating right away. Move the pointer onto it and a progress bar runs along its lower edge for about one second; when it fills, the result opens:
+It sits in the background watching your clipboard. Press `⌘C` anywhere and a pill drops down from the top of the screen and starts translating right away. It starts below the notch, but you can drag it anywhere and SayBetter remembers the position. Move the pointer onto it and a progress bar runs along its lower edge for about one second; when it fills, the result opens:
 
 - Copy Chinese, or any non-English text, and it translates into English while preserving your register — blunt stays blunt, warm stays warm.
 - Copy English and it corrects the grammar and makes it sound natural.
@@ -126,15 +127,15 @@ There is also a green dot in the menu bar. If the text is already on your clipbo
 - The four registers stay pinned at the top — no scrolling needed to switch. Body text scales with length.
 - A status area in the top-right corner reports progress — working, ready, copied, pinned, or error — next to the close button.
 - Results never appear before you are ready: the hover progress bar must fill first, so the rhythm is the same every time.
-- Light frosted glass: a white translucent surface with a highlight rim, over a few very faint colour washes that drift slowly (11–16s), on top of native macOS vibrancy.
-- The washes stay near the top and the body area is nearly white, so every piece of text still clears WCAG contrast even in the worst case (a pure black desktop under the strongest wash).
-- A green dot sits in the menu bar; click it to run on the current clipboard. It turns into a ring while working.
-- Its dropdown menu offers a one-click "pause clipboard translation" toggle, plus model settings (`⌘,`), the config folder, the introduction, and quit (`⌘Q`).
+- Native macOS popover material that follows the system Light/Dark appearance, Reduce Transparency, and Increase Contrast preferences.
+- Colour is reserved for status, edited words, and the primary action; semantic text levels keep the content calm and legible in both appearances.
+- A system-adaptive `S` symbol sits in the menu bar and changes to a same-size busy symbol while working, so nearby menu bar items do not jump.
+- Its menu offers translate-current-clipboard, pause clipboard translation, reset floating-panel position, model settings (`⌘,`), the config folder, the introduction, and quit (`⌘Q`).
 - Stays visible while working and after the result arrives; it does not disappear on its own.
 - Works with Anthropic, DeepSeek, Kimi, Qwen, Zhipu, Doubao/Volcengine Ark, OpenAI, Ollama, and any OpenAI-compatible gateway.
 - Automatically disables thinking mode on DeepSeek, Doubao, and Qwen to keep responses fast.
 - Interface available in Chinese, English, Vietnamese, Indonesian, Thai, and Malay.
-- Remains in the Dock; click the icon to reopen the panel.
+- Runs as a true menu bar app without occupying the Dock. Its native panel can be dragged, remembers its position, and stays above every Space and full-screen app.
 - A global shortcut panel (`⌥Space` by default) is available for manual input.
 
 ### Installation

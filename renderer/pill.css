@@ -1,21 +1,41 @@
-/* 灵动岛浮窗。克制优先：
-   一个主体（改好的那句话），标签一律小号淡墨，发丝线代替卡片，
-   颜色只用来标记被改动的词。底子是 macOS 原生毛玻璃。 */
+/* macOS 菜单栏浮层：材质和明暗由系统外观决定，
+   颜色只表达状态或主操作，而不用来装饰整个内容层。 */
 
 :root {
-  /* 正文不用中性黑灰：整族取自同一个靛蓝墨 —— 淡下去的次要文字会带一点雾蓝，
-     和背后的极光是同一个调子。换配色只要改 --ink 这一行。 */
-  --ink: 34, 42, 69;
+  color-scheme: light dark;
+  --fg: rgba(0, 0, 0, 0.88);
+  --fg-2: rgba(60, 60, 67, 0.78);
+  --fg-3: rgba(60, 60, 67, 0.72);
+  --line: rgba(60, 60, 67, 0.16);
+  --fill: rgba(120, 120, 128, 0.16);
+  --fill-hover: rgba(120, 120, 128, 0.24);
+  --surface: rgba(246, 246, 246, 0.70);
+  --surface-strong: rgba(252, 252, 252, 0.86);
+  --was: rgba(60, 60, 67, 0.72);
+  --shadow: rgba(0, 0, 0, 0.18);
+  --accent: #007aff;
+  --changed: #9a4f00;
+  --good: #1b6f32;
+  --bad: #d70015;
+}
 
-  --fg: rgb(var(--ink));                /* 主文字：靛墨 */
-  --fg-2: rgba(var(--ink), 0.76);       /* 次要文字 */
-  --fg-3: rgba(var(--ink), 0.56);       /* 标签 */
-  --line: rgba(var(--ink), 0.12);       /* 发丝分隔线 */
-  --was: rgba(var(--ink), 0.48);        /* 原来的说法：弱，但仍须读得出来 */
-
-  --accent: #2f6fed;
-  --changed: #9a5410;                   /* 被改动的词：琥珀，压深才在浅底上读得清 */
-  --bad: #c0392b;
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fg: rgba(255, 255, 255, 0.92);
+    --fg-2: rgba(235, 235, 245, 0.76);
+    --fg-3: rgba(235, 235, 245, 0.64);
+    --line: rgba(84, 84, 88, 0.58);
+    --fill: rgba(120, 120, 128, 0.24);
+    --fill-hover: rgba(120, 120, 128, 0.34);
+    --surface: rgba(28, 28, 30, 0.72);
+    --surface-strong: rgba(36, 36, 38, 0.88);
+    --was: rgba(235, 235, 245, 0.64);
+    --shadow: rgba(0, 0, 0, 0.48);
+    --accent: #0a84ff;
+    --changed: #ff9f0a;
+    --good: #30d158;
+    --bad: #ff453a;
+  }
 }
 
 * { box-sizing: border-box; }
@@ -32,33 +52,25 @@ html, body {
   cursor: default;
 }
 
-/* 三层：极淡的色晕在最底下缓慢漂移 → 细噪点 → 浅色玻璃面承载所有内容。
-   白底压到 0.78，深色桌面透上来也仍是浅色，正文不会被冲淡。 */
 .pill {
   position: relative;
   height: 100%;
-  /* 收起态更透（玻璃感），展开态更白（保证长文可读）—— 下面按状态覆盖 */
-  background: rgba(255, 255, 255, 0.62);
-  border: 1px solid rgba(255, 255, 255, 0.55);
-  border-top: 0;
-  border-radius: 0 0 22px 22px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
   overflow: hidden;
   isolation: isolate;
   transition: background 220ms cubic-bezier(0.25, 0.6, 0.3, 1);
 }
 .pill.expanded {
-  background: rgba(255, 255, 255, 0.78);
-  border-radius: 0 0 18px 18px;
+  background: var(--surface-strong);
+  border-radius: 16px;
 }
 
 /* ---- 极光 ---- */
 
 .aurora {
-  position: absolute;
-  inset: -40%;
-  z-index: 0;
-  pointer-events: none;
-  filter: blur(44px) saturate(120%);
+  display: none;
 }
 .band {
   position: absolute;
@@ -83,26 +95,13 @@ html, body {
 
 /* 细噪点：大面积渐变最容易出现色阶断层，撒一层噪点就压住了 */
 .grain {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  pointer-events: none;
-  opacity: 0.10;
-  mix-blend-mode: multiply;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/></filter><rect width='140' height='140' filter='url(%23n)' opacity='0.5'/></svg>");
+  display: none;
 }
 
 /* ---- 玻璃面 ---- */
 
 .pill.expanded .glass {
-  /* 展开后正文多，往下逐渐加白，让长段落落在几乎纯白的区域 */
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.30) 0%,
-    rgba(255, 255, 255, 0.52) 20%,
-    rgba(255, 255, 255, 0.74) 46%,
-    rgba(255, 255, 255, 0.82) 100%
-  );
+  background: transparent;
 }
 
 .glass {
@@ -111,36 +110,28 @@ html, body {
   height: 100%;
   display: flex;
   flex-direction: column;
-  /* 顶部略透让色晕露一点，往下逐渐加白 —— 正文落在几乎纯白的区域。 */
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.10));
-  backdrop-filter: blur(26px) saturate(165%);
-  -webkit-backdrop-filter: blur(26px) saturate(165%);
+  background: transparent;
   border-radius: inherit;
-  /* 上缘一道高光切面，下缘一点内阴影，做出悬浮的厚度 */
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.9),
-    inset 0 -1px 0 rgba(var(--ink), 0.05),
-    0 14px 34px rgba(var(--ink), 0.16);
+  box-shadow: 0 12px 30px var(--shadow);
 }
 
 /* ---- 收起态 ---- */
 
 .bar {
   position: relative;
-  /* 收起态：不垫白，让它是一颗真正通透的玻璃胶囊。 */
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.20));
+  background: transparent;
   flex: none;
   height: 44px;
   display: flex;
   align-items: center;
   gap: 9px;
   padding: 0 17px;
+  cursor: grab;
+  -webkit-app-region: drag;
 }
-/* 展开态：极光最亮的一段正好在顶部，这里补一层局部白底压住色晕，
-   否则方向标和右上角状态读不清。（收起态没有这个问题：那一行只有
-   方向标和一截很淡的预览，通透比压白重要。） */
 .pill.expanded .bar {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.60), rgba(255, 255, 255, 0.38));
+  background: var(--fill);
+  border-bottom: 1px solid var(--line);
 }
 
 .spacer { flex: 1; }
@@ -149,7 +140,7 @@ html, body {
   flex: none;
   width: 8px; height: 8px;
   border-radius: 50%;
-  background: #22a04c;
+  background: var(--good);
 }
 .dot.working { animation: breathe 1.4s ease-in-out infinite; }
 .dot.error { background: var(--bad); animation: none; }
@@ -185,7 +176,7 @@ html, body {
   white-space: nowrap;
   transition: color 200ms cubic-bezier(0.25, 0.6, 0.3, 1);
 }
-.status.ok { color: #1d7a3f; }
+.status.ok { color: var(--good); }
 .status.err { color: var(--bad); }
 
 .hdr-btn {
@@ -199,10 +190,11 @@ html, body {
   font-size: 11px;
   line-height: 1;
   color: var(--fg-3);
-  background: rgba(var(--ink), 0.05);
-  border: 1px solid rgba(var(--ink), 0.10);
-  border-radius: 6px;
+  background: var(--fill);
+  border: 0;
+  border-radius: 50%;
   cursor: pointer;
+  -webkit-app-region: no-drag;
   transition:
     color 200ms cubic-bezier(0.25, 0.6, 0.3, 1),
     background 200ms cubic-bezier(0.25, 0.6, 0.3, 1),
@@ -211,8 +203,7 @@ html, body {
 }
 .hdr-btn:hover {
   color: var(--fg);
-  background: rgba(var(--ink), 0.10);
-  border-color: rgba(var(--ink), 0.20);
+  background: var(--fill-hover);
 }
 .hdr-btn:active { transform: scale(0.92); }
 
@@ -223,7 +214,7 @@ html, body {
   height: 3px;
   margin: 0 14px 5px;
   border-radius: 2px;
-  background: rgba(var(--ink), 0.10);
+  background: var(--fill);
   overflow: hidden;
   opacity: 0;
   transition: opacity 160ms ease-out;
@@ -233,7 +224,7 @@ html, body {
   height: 100%;
   width: 0;
   border-radius: 2px;
-  background: linear-gradient(90deg, #4b87f2, var(--accent));
+  background: var(--accent);
 }
 
 /* ---- 展开态 ---- */
@@ -243,7 +234,7 @@ html, body {
 
 /* 语气切换：固定在顶部，永远看得见，不用下滑 */
 .tones {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.58));
+  background: transparent;
   flex: none;
   display: flex;
   gap: 18px;
@@ -257,7 +248,7 @@ html, body {
   font: inherit;
   font-size: 12.5px;
   /* 比一般次要文字亮一档：这是四个可点的选项，淡到看不清就等于只有一个 */
-  color: rgba(var(--ink), 0.62);
+  color: var(--fg-2);
   cursor: pointer;
   position: relative;
   transition: color 0.12s;
@@ -334,15 +325,15 @@ html, body {
 
 .action {
   flex: none;
-  background: rgba(255, 255, 255, 0.72);
-  border: 1px solid rgba(var(--ink), 0.12);
+  background: var(--fill);
+  border: 1px solid var(--line);
   color: var(--fg-2);
   border-radius: 9px;
   padding: 6px 12px;
   font: inherit;
   font-size: 12px;
   cursor: pointer;
-  box-shadow: 0 1px 2px rgba(var(--ink), 0.06);
+  box-shadow: none;
   transition:
     background 200ms cubic-bezier(0.25, 0.6, 0.3, 1),
     border-color 200ms cubic-bezier(0.25, 0.6, 0.3, 1),
@@ -352,14 +343,14 @@ html, body {
 }
 .action:hover {
   color: var(--fg);
-  background: #fff;
-  border-color: rgba(var(--ink), 0.22);
-  box-shadow: 0 4px 12px rgba(var(--ink), 0.12);
+  background: var(--fill-hover);
+  border-color: var(--line);
+  box-shadow: none;
 }
 /* Active 收敛：缩到 0.98 并把阴影收回去，做出按下去的感觉 */
 .action:active {
   transform: scale(0.98);
-  box-shadow: inset 0 1px 2px rgba(var(--ink), 0.14);
+  box-shadow: inset 0 1px 2px var(--shadow);
 }
 .action.icon { padding: 6px 10px; color: var(--fg-3); }
 
@@ -369,19 +360,19 @@ html, body {
   font-size: 13.5px;
   font-weight: 600;
   color: #fff;
-  background: linear-gradient(135deg, #4b87f2 0%, #2f6fed 100%);
+  background: var(--accent);
   border-color: transparent;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.28),
-    0 4px 14px rgba(47, 111, 237, 0.28);
+    inset 0 1px 0 rgba(255, 255, 255, 0.20),
+    0 1px 2px var(--shadow);
 }
 .action.primary:hover {
   color: #fff;
-  background: linear-gradient(135deg, #5c93f5 0%, #3d7bf0 100%);
+  background: var(--accent);
   border-color: transparent;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.34),
-    0 6px 20px rgba(47, 111, 237, 0.38);
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 2px 5px var(--shadow);
 }
 .action.primary:active {
   transform: scale(0.98);
@@ -389,10 +380,10 @@ html, body {
 }
 
 .pill.pinned { box-shadow: inset 2px 0 0 var(--accent); }
-.pill.collapsed .bar { cursor: pointer; }
+.pill.collapsed .bar { cursor: grab; }
 
 ::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-thumb { background: rgba(var(--ink), 0.18); border-radius: 3px; }
+::-webkit-scrollbar-thumb { background: var(--fill-hover); border-radius: 3px; }
 
 /* 结果还没回来就展开了（模型比悬停还慢）：正文让位，只留一句提示 */
 .pill.working .tones,
@@ -407,4 +398,13 @@ html, body {
 @media (prefers-reduced-motion: reduce) {
   .band { animation: none !important; }
   .action, .tone { transition-duration: 1ms !important; }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .pill, .pill.expanded { background: var(--surface-strong); }
+}
+
+@media (prefers-contrast: more) {
+  :root { --line: currentColor; }
+  .pill { border-width: 2px; }
 }
