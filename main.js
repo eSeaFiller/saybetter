@@ -680,7 +680,7 @@ function buildTray() {
   startupLog(`tray icon empty=${icon.isEmpty()} size=${JSON.stringify(icon.getSize())}`);
   tray = new Tray(icon);
   // 不设 setTitle：状态项宽度 = 图标宽度 + 16pt，加上文字要占 100pt，
-  // 菜单栏排满时根本挤不进去（刘海底下 macOS 不会放状态项）。纯图标只要 24pt。
+  // 菜单栏排满时根本挤不进去（刘海底下 macOS 不会放状态项）。纯图标 16px 宽 → 32pt。
   tray.setToolTip('SayBetter');
   buildTrayMenu();
   setTimeout(checkTrayPlaced, 500);
@@ -699,7 +699,12 @@ function trayIsPlaced() {
 function checkTrayPlaced() {
   if (!tray || tray.isDestroyed() || trayFallbackDone) return;
   if (trayIsPlaced()) {
-    startupLog(`tray ready bounds=${JSON.stringify(tray.getBounds())}`);
+    // 多屏时状态项可能落在外接屏的菜单栏上，只看 y 会误以为"用户能看见"。
+    const b = tray.getBounds();
+    const d = screen.getDisplayNearestPoint({ x: b.x, y: b.y });
+    const primary = screen.getPrimaryDisplay();
+    const which = d.id === primary.id ? '主屏' : `外接屏(id=${d.id})`;
+    startupLog(`tray ready bounds=${JSON.stringify(b)} 落在${which}`);
     return;
   }
   startupLog(`tray NOT placed bounds=${JSON.stringify(tray.getBounds())} —— 菜单栏没空位，回退到程序坞`);

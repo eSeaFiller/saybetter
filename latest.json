@@ -1,5 +1,5 @@
 {
-  "version": "0.4.9",
-  "url": "https://github.com/eSeaFiller/saybetter/releases/download/v0.4.9/SayBetter-0.4.9-arm64.dmg",
-  "notes": "菜单栏图标终于能显示：状态项从 100pt 收窄到 24pt（去掉标题文字 + 图标裁窄），并在菜单栏放不下时自动回退到程序坞"
+  "version": "0.5.0",
+  "url": "https://github.com/eSeaFiller/saybetter/releases/download/v0.5.0/SayBetter-0.5.0-arm64.dmg",
+  "notes": "菜单栏图标换成气泡+对勾（忙碌态三点），比原来的细 S 好认得多；启动日志记录图标落在哪块屏"
 }
