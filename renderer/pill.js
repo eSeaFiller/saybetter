@@ -1,289 +1,229 @@
 'use strict';
 
-const $ = (s) => document.querySelector(s);
-const pillEl = $('#pill');
-const dot = $('#dot');
-const directionEl = $('#direction');
-const peek = $('#peek');
-const headline = $('#headline');
-const sourceEl = $('#source');
-const tonesEl = $('#tones');
-const whyWrap = $('#why-wrap');
-const whyLabel = $('#why-label');
-const whyEl = $('#why');
-const hint = $('#hint');
-const btnCopy = $('#btn-copy');
-const btnClose = $('#btn-close');
-const statusEl = $('#status');
-const progressFill = $('#progress-fill');
-const waitingEl = $('#waiting');
-
-// 悬停进度：鼠标移上来之后，灵动岛下沿走一条进度；走满才展开结果。
-// 请求在复制那一刻就发出去了，所以这段时间通常已经把结果等回来了。
-let dwellTimer = null;
-
+const $ = (selector) => document.querySelector(selector);
+const $$ = (selector) => [...document.querySelectorAll(selector)];
+const MODES = ['default', 'formal', 'casual', 'concise', 'learning'];
+const STANDARD_MODES = ['default', 'formal', 'casual', 'concise'];
+const LANGUAGE_BADGES = { en: 'EN', fr: 'FR', de: 'DE', ja: 'JA' };
 let raw = '';
-let variants = [];   // [{ tone, text, why[] }]
-let chosen = 0;
+let bundleRaw = '';
 let expanded = false;
-let pinned = false;
+let mode = 'default';
 let sourceText = '';
-let t = (k) => k;
+let sources = [];
+let pointerInside = false;
 
-const STRINGS = {
-  zh: { idle: '移入即可翻译', working: '正在看', ready: '好了', done: '', error: '出错', copied: '已复制', copy: '复制译文',
-        why: '为什么这样说', hint: '移开自动收起', pinned: '已钉住', empty: '模型没有返回内容',
-        translate: '译 → 英', proofread: '英文校对' },
-  en: { idle: 'Hover to translate', working: 'Working', ready: 'Ready', done: '', error: 'Error', copied: 'Copied', copy: 'Copy',
-        why: 'Why it reads better', hint: 'Move away to collapse', pinned: 'Pinned', empty: 'The model returned nothing',
-        translate: '→ EN', proofread: 'Polish' },
-  vi: { idle: 'Di chuột vào để dịch', working: 'Đang xử lý', ready: 'Xong', done: '', error: 'Lỗi', copied: 'Đã sao chép', copy: 'Sao chép',
-        why: 'Vì sao nên viết vậy', hint: 'Di chuột ra để thu gọn', pinned: 'Đã ghim', empty: 'Mô hình không trả về nội dung',
-        translate: '→ EN', proofread: 'Hiệu đính' },
-  id: { idle: 'Arahkan kursor untuk menerjemahkan', working: 'Memproses', ready: 'Siap', done: '', error: 'Error', copied: 'Tersalin', copy: 'Salin',
-        why: 'Kenapa begini lebih baik', hint: 'Jauhkan kursor untuk menutup', pinned: 'Disematkan', empty: 'Model tidak mengembalikan apa pun',
-        translate: '→ EN', proofread: 'Perbaiki' },
-  th: { idle: 'เลื่อนเมาส์เข้ามาเพื่อแปล', working: 'กำลังทำงาน', ready: 'เสร็จแล้ว', done: '', error: 'ผิดพลาด', copied: 'คัดลอกแล้ว', copy: 'คัดลอก',
-        why: 'ทำไมจึงดีกว่า', hint: 'เลื่อนเมาส์ออกเพื่อย่อ', pinned: 'ปักหมุดแล้ว', empty: 'โมเดลไม่ได้ส่งเนื้อหากลับมา',
-        translate: '→ EN', proofread: 'ขัดเกลา' },
-  ms: { idle: 'Halakan tetikus untuk terjemah', working: 'Memproses', ready: 'Siap', done: '', error: 'Ralat', copied: 'Disalin', copy: 'Salin',
-        why: 'Kenapa ini lebih baik', hint: 'Alihkan tetikus untuk tutup', pinned: 'Disemat', empty: 'Model tidak mengembalikan apa-apa',
-        translate: '→ EN', proofread: 'Perhalus' },
-};
-
-/* ---------------- 极简 markdown ---------------- */
-
-function esc(s) {
-  return s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+function esc(value) {
+  return String(value || '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 }
-function inline(s) {
-  return esc(s)
+
+function inline(value) {
+  return esc(value)
+    .replace(/\[SUBJECT\]([\s\S]+?)\[\/SUBJECT\]/g, '<span class="grammar-subject">$1</span>')
+    .replace(/\[PREDICATE\]([\s\S]+?)\[\/PREDICATE\]/g, '<span class="grammar-predicate">$1</span>')
+    .replace(/\[OBJECT\]([\s\S]+?)\[\/OBJECT\]/g, '<span class="grammar-object">$1</span>')
     .replace(/~~(.+?)~~/g, '<del>$1</del>')
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/`([^`]+)`/g, '<code>$1</code>');
+    .replace(/`(.+?)`/g, '<code>$1</code>');
 }
 
-// 两级结构：最浅的一级标题是一个方案，更深的是它的「为什么」。
-// 模型不一定给「为什么」那级标题，所以还有一条兜底：方案内部第一条列表项
-// 之前是句子，从它开始都是理由。
-function parseVariants(md) {
-  const lines = md.split('\n').map((ln) => ln.replace(/^\s*```\w*\s*$/, ''));
-  const HEAD = /^(#{1,6})\s*(.+?)\s*$/;
+function tokenKey(value) {
+  return String(value || '').toLocaleLowerCase().replace(/[\p{P}\p{S}\s]+/gu, '');
+}
 
-  let top = 7;
+function tokenize(value) {
+  return String(value || '').match(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]|[\p{L}\p{N}]+(?:['’\-][\p{L}\p{N}]+)*|[^\p{L}\p{N}\s]+|\s+/gu) || [];
+}
+
+function lexicalKeys(value) {
+  return tokenize(value).map(tokenKey).filter(Boolean);
+}
+
+function lcs(left, right) {
+  const rows = Array.from({ length: left.length + 1 }, () => new Uint16Array(right.length + 1));
+  for (let i = left.length - 1; i >= 0; i -= 1) {
+    for (let j = right.length - 1; j >= 0; j -= 1) {
+      rows[i][j] = left[i] === right[j] ? rows[i + 1][j + 1] + 1 : Math.max(rows[i + 1][j], rows[i][j + 1]);
+    }
+  }
+  const result = [];
+  let i = 0;
+  let j = 0;
+  while (i < left.length && j < right.length) {
+    if (left[i] === right[j]) { result.push(left[i]); i += 1; j += 1; }
+    else if (rows[i + 1][j] >= rows[i][j + 1]) i += 1;
+    else j += 1;
+  }
+  return result;
+}
+
+function highlightModeDifferences(value) {
+  const values = STANDARD_MODES.map((itemMode) => extractPrimary(sectionForMode(bundleRaw, itemMode), itemMode)).filter(Boolean);
+  if (values.length !== STANDARD_MODES.length) return inline(value);
+  const shared = values.map(lexicalKeys).reduce((common, item) => lcs(common, item));
+  let sharedIndex = 0;
+  return tokenize(value).map((token) => {
+    const key = tokenKey(token);
+    const html = inline(token);
+    if (!key) return html;
+    if (key === shared[sharedIndex]) { sharedIndex += 1; return html; }
+    return `<span class="mode-diff">${html}</span>`;
+  }).join('');
+}
+
+function renderMarkdown(markdown) {
+  const clean = String(markdown || '').replace(/<!--\s*NEWS_QUERY[\s\S]*?-->/gi, '');
+  const primary = extractPrimary(clean, mode);
+  const lines = clean.split(/\r?\n/);
+  const html = [];
+  let list = false;
   for (const line of lines) {
-    const h = line.match(HEAD);
-    if (h) top = Math.min(top, h[1].length);
-  }
-
-  const out = [];
-  let cur = null;
-  let inWhy = false;
-  for (const line of lines) {
-    const h = line.match(HEAD);
-    if (h) {
-      if (h[1].length > top) inWhy = true;
-      else { cur = { tone: h[2], text: [], why: [] }; out.push(cur); inWhy = false; }
-    } else if (cur) {
-      (inWhy ? cur.why : cur.text).push(line);
+    const heading = line.match(/^#{1,6}\s+(.+)$/);
+    const bullet = line.match(/^\s*[-*•]\s+(.+)$/);
+    if (heading) {
+      if (list) { html.push('</ul>'); list = false; }
+      html.push(`<h3>${inline(heading[1])}</h3>`);
+    } else if (bullet) {
+      if (!list) { html.push('<ul>'); list = true; }
+      html.push(`<li>${inline(bullet[1])}</li>`);
+    } else if (line.trim()) {
+      if (list) { html.push('</ul>'); list = false; }
+      const content = STANDARD_MODES.includes(mode) && line.trim() === primary
+        ? highlightModeDifferences(line.trim())
+        : inline(line.trim());
+      html.push(`<p>${content}</p>`);
     }
   }
+  if (list) html.push('</ul>');
+  return html.join('');
+}
 
-  const BULLET = /^\s*(?:[-*+•]|\d+[.)])\s+/;
-  for (const v of out) {
-    if (v.why.length) continue;
-    const i = v.text.findIndex((l) => BULLET.test(l));
-    if (i > 0) { v.why = v.text.slice(i); v.text = v.text.slice(0, i); }
+function extractPrimary(markdown, selectedMode = mode) {
+  const targetHeading = selectedMode === 'learning' ? '自然表达' : '优化表达';
+  const clean = String(markdown || '').replace(/<!--\s*NEWS_QUERY[\s\S]*?-->/gi, '');
+  const matches = [...clean.matchAll(/^#{1,6}\s+(.+)\n([\s\S]*?)(?=^#{1,6}\s+|$)/gm)];
+  const target = matches.find((match) => match[1].includes(targetHeading)) || matches[0];
+  return (target?.[2] || clean).replace(/^[-*•]\s+/gm, '').replace(/\[(?:SUBJECT|PREDICATE|OBJECT)\]|\[\/(?:SUBJECT|PREDICATE|OBJECT)\]/g, '').trim();
+}
+
+function sectionForMode(markdown, selectedMode) {
+  const clean = String(markdown || '').replace(/<!--\s*NEWS_QUERY[\s\S]*?-->/gi, '');
+  const marker = /^\s{0,3}#{1,4}\s+(?:MODE\s*[:：-]\s*)?(default|formal|casual|concise|learning)\s*$/gim;
+  const sections = [...clean.matchAll(marker)];
+  const selectedIndex = sections.findIndex((entry) => entry[1].toLowerCase() === selectedMode);
+  if (selectedIndex >= 0) {
+    const start = sections[selectedIndex].index + sections[selectedIndex][0].length;
+    const end = sections[selectedIndex + 1]?.index ?? clean.length;
+    return clean.slice(start, end).trim();
   }
-  return out.map((v) => ({ tone: v.tone, text: v.text.join('\n').trim(), why: v.why }));
-}
-
-// 「为什么」里已经用 **粗体** 标出了改成的说法。把这些词在主句里也高亮，
-// 一眼就能看出这句话动了哪儿 —— 这是 PhrasePeek 那种「关键词着色」的做法。
-function highlight(sentence, why) {
-  const marks = [];
-  for (const line of why) {
-    for (const m of line.matchAll(/\*\*(.+?)\*\*/g)) {
-      const w = m[1].trim();
-      if (w.length >= 2 && w.length <= 60) marks.push(w);
-    }
+  if (sections.length) {
+    // The chosen section has not arrived yet during streaming. Keep the panel in
+    // a loading state rather than exposing internal MODE delimiters as content.
+    return '';
   }
-  let html = esc(sentence);
-  // 长的先替换，避免短词把长短语切碎
-  for (const w of [...new Set(marks)].sort((a, b) => b.length - a.length)) {
-    const safe = esc(w).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    html = html.replace(new RegExp(`(?<!<em>)${safe}`, 'g'), `<em>${esc(w)}</em>`);
-  }
-  return html;
+  return clean.trim();
 }
 
-function renderWhy(lines) {
-  const BULLET = /^\s*(?:[-*+•]|\d+[.)])\s+(.*)$/;
-  return lines
-    .map((l) => {
-      const m = l.match(BULLET);
-      const body = m ? m[1] : l;
-      return body.trim() ? `<p>${inline(body)}</p>` : '';
-    })
-    .join('');
+function paint() {
+  raw = bundleRaw ? sectionForMode(bundleRaw, mode) : raw;
+  $('#output').innerHTML = raw ? renderMarkdown(raw) : '<p class="result-pending">正在生成该模式的结果…</p>';
+  $('#preview').textContent = extractPrimary(raw).replace(/\s+/g, ' ') || '正在生成…';
 }
 
-/* ---------------- 右上角状态 ---------------- */
-
-// 展开后头部右侧显示当前状态。收起态那里让位给预览截段，所以只在展开时可见。
-function setStatus(text, kind) {
-  statusEl.textContent = text || '';
-  statusEl.className = 'status' + (kind ? ' ' + kind : '');
+function setMode(next, notify = true) {
+  if (!MODES.includes(next)) return;
+  mode = next;
+  $('#btn-favorite').textContent = '收藏';
+  $('#btn-favorite').classList.remove('saved');
+  $$('.pill-mode').forEach((button) => button.classList.toggle('on', button.dataset.mode === next));
+  if (bundleRaw) paint();
+  if (notify) window.pill.setMode(next, '');
 }
 
-/* ---------------- 悬停进度 ---------------- */
-
-function startDwell(ms) {
-  clearTimeout(dwellTimer);
-  pillEl.classList.add('dwelling');
-  progressFill.style.transition = 'none';
-  progressFill.style.width = '0%';
-  void progressFill.offsetWidth;                  // 强制回流，否则不会从 0 开始跑
-  progressFill.style.transition = `width ${ms}ms linear`;
-  progressFill.style.width = '100%';
+function expandNow() {
+  pointerInside = true;
+  window.pill.expand();
 }
 
-function cancelDwell() {
-  clearTimeout(dwellTimer);
-  // 中途移开：快速收回去，别停在半截上
-  progressFill.style.transition = 'width 180ms ease-out';
-  progressFill.style.width = '0%';
-  dwellTimer = setTimeout(() => pillEl.classList.remove('dwelling'), 180);
+function notePointerLeave() {
+  pointerInside = false;
 }
 
-/* ---------------- 渲染 ---------------- */
-
-function paint(streaming) {
-  variants = parseVariants(raw);
-  if (chosen >= variants.length) chosen = 0;
-
-  const v = variants[chosen];
-  const sentence = v ? v.text : '';
-
-  // 收起态：只露一小截，很淡
-  peek.textContent = sentence.replace(/\n/g, ' ');
-
-  if (!variants.length) {
-    headline.innerHTML = raw.trim()
-      ? esc(raw.trim())                      // 模型没按结构输出，原样显示
-      : (streaming ? '' : esc(t('empty')));
-    tonesEl.innerHTML = '';
-    whyWrap.hidden = true;
-    return;
-  }
-
-  headline.innerHTML = highlight(sentence, v.why);
-  // 字号随长度自适应：一句话就给足气势，一整段就退到能读下去的尺寸，
-  // 否则长文本会把下面的东西全顶出可视区。
-  const n = sentence.length;
-  headline.className =
-    'headline' + (n > 320 ? ' len-xl' : n > 180 ? ' len-l' : n > 90 ? ' len-m' : '');
-  sourceEl.textContent = sourceText;
-
-  // 语气切换：纯文字
-  tonesEl.innerHTML = variants
-    .map((x, i) => `<button class="tone${i === chosen ? ' on' : ''}" data-i="${i}">${esc(x.tone)}</button>`)
-    .join('');
-
-  const why = renderWhy(v.why);
-  whyWrap.hidden = !why;
-  whyLabel.textContent = t('why');
-  whyEl.innerHTML = why;
-}
-
-/* ---------------- 交互 ---------------- */
-
-document.addEventListener('click', (e) => {
-  const tone = e.target.closest('.tone');
-  if (tone) {
-    e.stopPropagation();
-    chosen = Number(tone.dataset.i);
-    paint(false);
-    return;
-  }
-  if (e.target.closest('#btn-copy')) {
-    e.stopPropagation();
-    const txt = variants[chosen] ? variants[chosen].text : raw.trim();
-    if (txt) {
-      window.pill.copy(txt);
-      hint.textContent = t('copied');
-      setStatus(t('copied'), 'ok');
-    }
-    return;
-  }
-  if (e.target.closest('#btn-close')) { e.stopPropagation(); window.pill.close(); return; }
-  window.pill.click();   // 点其它地方 = 钉住 / 取消钉住
+$('#island').addEventListener('mouseenter', expandNow);
+$('#island').addEventListener('mousemove', expandNow);
+$('#island').addEventListener('mouseleave', notePointerLeave);
+$('#btn-close').addEventListener('click', (event) => { event.stopPropagation(); window.pill.close(); });
+$('#btn-copy').addEventListener('click', (event) => {
+  event.stopPropagation();
+  const text = extractPrimary(raw);
+  if (text) { window.pill.copy(text); $('#status').textContent = '已复制'; }
 });
-
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') window.pill.close();
+$('#btn-favorite').addEventListener('click', async (event) => {
+  event.stopPropagation();
+  const output = extractPrimary(raw);
+  if (!output) return;
+  await window.pill.favorite({ mode, source: sourceText, output, sources });
+  const button = $('#btn-favorite');
+  button.textContent = '已收藏';
+  button.classList.add('saved');
+  $('#status').textContent = '已收藏到本机';
 });
+$$('.pill-mode').forEach((button) => button.addEventListener('click', (event) => {
+  event.stopPropagation();
+  setMode(button.dataset.mode);
+}));
 
-/* ---------------- 主进程事件 ---------------- */
-
-window.pill.onExpanded((v) => {
-  expanded = !!v;
-  pillEl.classList.toggle('expanded', expanded);
-  pillEl.classList.toggle('collapsed', !expanded);
+window.pill.onExpanded((value) => {
+  expanded = Boolean(value);
+  $('#island').classList.toggle('expanded', expanded);
+  $('#island').classList.toggle('collapsed', !expanded);
 });
-
-window.pill.onPinned((v) => {
-  pinned = !!v;
-  pillEl.classList.toggle('pinned', pinned);
-  hint.textContent = pinned ? t('pinned') : t('hint');
-  if (pinned) setStatus(t('pinned'), 'ok');
-  else if (!pillEl.classList.contains('working')) setStatus(t('ready'), 'ok');
-});
-
-window.pill.onDwell((ms) => startDwell(ms));
-window.pill.onDwellCancel(() => cancelDwell());
-
-window.pill.onStart(({ language, mode, source }) => {
-  const s = STRINGS[language] || STRINGS.zh;
-  t = (k) => (s[k] !== undefined ? s[k] : k);
-
+window.pill.onStart((payload) => {
   raw = '';
-  variants = [];
-  chosen = 0;
-  sourceText = source || '';
-
-  directionEl.textContent = t(mode === 'proofread' ? 'proofread' : 'translate');
-  headline.innerHTML = '';
-  sourceEl.textContent = '';
-  tonesEl.innerHTML = '';
-  whyWrap.hidden = true;
-  peek.textContent = '';
-  hint.textContent = t('hint');
-  btnCopy.textContent = t('copy');
-  dot.className = 'dot working';
-  pillEl.classList.add('working');
-  pillEl.classList.remove('pinned');
-  pinned = false;
-  waitingEl.textContent = t('working');
-  setStatus(t('working'));
+  bundleRaw = '';
+  sources = [];
+  sourceText = payload?.source || '';
+  setMode(payload?.mode || 'default', false);
+  $('#source').textContent = sourceText;
+  $('#pill-language').textContent = `→ ${LANGUAGE_BADGES[payload?.targetLanguage] || 'EN'}`;
+  $('#preview').textContent = '正在生成…';
+  $('#output').innerHTML = '';
+  $('#pill-sources').hidden = true;
+  $('#status').textContent = '生成中…';
+  $('#btn-copy').disabled = true;
+  $('#btn-favorite').disabled = true;
+  $('#btn-favorite').textContent = '收藏';
+  $('#btn-favorite').classList.remove('saved');
+  $('#dot').className = 'dot working';
 });
-
-window.pill.onDelta((d) => { raw += d; paint(true); });
-
-window.pill.onDone(() => {
-  dot.className = 'dot';
-  pillEl.classList.remove('working');
-  setStatus(t('ready'), 'ok');
-  paint(false);
+window.pill.onDelta((chunk) => { bundleRaw += chunk; paint(); });
+window.pill.onBundleSelect((payload) => {
+  mode = payload?.mode || mode;
+  bundleRaw = payload?.output || bundleRaw;
+  sources = payload?.sources || [];
+  setMode(mode, false);
+  paint();
+  const sourceBox = $('#pill-sources');
+  sourceBox.hidden = mode !== 'learning' || !sources.length;
+  sourceBox.innerHTML = sources.slice(0, 2).map((item) => `<button class="pill-source" title="${esc(item.source || '')}">${esc(item.title)}</button>`).join('');
 });
-
-window.pill.onError((msg) => {
-  dot.className = 'dot error';
-  pillEl.classList.remove('working');
-  setStatus(t('error'), 'err');
-  headline.innerHTML = `<span style="font-size:14px">${esc(msg)}</span>`;
-  sourceEl.textContent = '';
-  tonesEl.innerHTML = '';
-  whyWrap.hidden = true;
-  peek.textContent = t('error');
+window.pill.onDone((payload) => {
+  sources = payload?.sources || [];
+  bundleRaw = payload?.output || bundleRaw;
+  paint();
+  $('#dot').className = 'dot';
+  $('#status').textContent = '完成';
+  $('#btn-copy').disabled = !extractPrimary(raw);
+  $('#btn-favorite').disabled = !extractPrimary(raw);
+  const sourceBox = $('#pill-sources');
+  sourceBox.hidden = mode !== 'learning' || !sources.length;
+  sourceBox.innerHTML = sources.slice(0, 2).map((item) => `<button class="pill-source" title="${esc(item.source || '')}">${esc(item.title)}</button>`).join('');
+});
+window.pill.onError((message) => {
+  raw = `### 无法生成\n${message}`;
+  paint();
+  $('#dot').className = 'dot error';
+  $('#status').textContent = '请检查 API 设置';
+  $('#btn-copy').disabled = true;
+  $('#btn-favorite').disabled = true;
 });

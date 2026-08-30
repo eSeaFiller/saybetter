@@ -5,528 +5,491 @@ const {
   BrowserWindow,
   Tray,
   Menu,
-  globalShortcut,
   ipcMain,
   clipboard,
   safeStorage,
   nativeImage,
-  Notification,
   shell,
+  dialog,
+  nativeTheme,
   screen,
 } = require('electron');
-const path = require('path');
 const fs = require('fs');
+const path = require('path');
+const { spawn } = require('child_process');
 const { PRESETS, streamCheck } = require('./providers');
 const { checkForUpdate, CHECK_INTERVAL_MS, REPO } = require('./updater');
 
 const CONFIG_PATH = () => path.join(app.getPath('userData'), 'config.json');
-const UI_STATE_PATH = () => path.join(app.getPath('userData'), 'ui-state.json');
-const STARTUP_LOG_PATH = () => path.join(app.getPath('userData'), 'startup.log');
-const LEGACY_CONFIG_PATHS = () => [
-  path.join(app.getPath('appData'), 'wo-shuo-de-dui-ma', 'config.json'),
-  path.join(app.getPath('appData'), '我说的对吗', 'config.json'),
-];
+const FAVORITES_PATH = () => path.join(app.getPath('userData'), 'favorites.json');
+const PILL_POSITION_PATH = () => path.join(app.getPath('userData'), 'pill-position.json');
 const DEFAULT_CONFIG = {
-  providerId: 'ark',
+  providerId: 'openai',
   baseUrl: '',
-  model: '',
+  model: 'gpt-4o-mini',
   apiKey: '',
-  hotkey: 'Alt+Space',
   language: 'zh',
+  appearance: 'system',
   watchClipboard: true,
+  pillMode: 'default',
+  targetLanguage: 'en',
+  customPrompt: '',
 };
 
-// 灵动岛浮窗尺寸
-const PILL_W = 260;
-const PILL_H = 52;  // 44 的文字行 + 下沿 8px 容纳悬停进度条
-const PILL_EXPANDED_W = 440;
-const PILL_EXPANDED_H = 380;
-const CLIPBOARD_POLL_MS = 400;
-// 鼠标移上来之后，灵动岛下沿走一条进度条；走满才展开结果。
-// 请求本身在复制时就已经发出去了，这段时间通常已经跑完，所以进度一到就有内容。
-const HOVER_DELAY_MS = 1000;
-const MAX_WATCH_CHARS = 1200; // 太长的复制（整篇文档、大段代码）不自动送去 API
+const PILL_WIDTH = 320;
+const PILL_HEIGHT = 54;
+const PILL_EXPANDED_WIDTH = 580;
+const PILL_EXPANDED_HEIGHT = 460;
+const PILL_HOVER_POLL_MS = 45;
+const PILL_COLLAPSE_DELAY_MS = 320;
+const CLIPBOARD_POLL_MS = 500;
+const MAX_CLIPBOARD_CHARS = 1200;
 
-let tray = null;
-let win = null;
-let currentAbort = null;
-let suppressBlurUntil = 0;
-let rendererReady = false;
-let showOnLaunch = true;
-let keepPanelOpen = false;
-let isQuitting = false;
-const pendingSends = [];
-
-let pillWin = null;
-let pillAbort = null;
-let pillExpanded = false;
-let clipboardTimer = null;
+let tray;
+let nativeStatusProcess;
+let win;
+let pillWin;
+let currentAbort;
+let pillAbort;
+let pillBundleText = '';
+let pillBundleOutput = '';
+let pillBundleSources = [];
+let clipboardTimer;
 let lastClipboard = '';
-let selfWrote = ''; // 自己写进剪贴板的内容，不能再触发一轮
-let cursorTimer = null;
-let pillPinned = false; // 点过之后钉住，移开也不收
-let hoverTimer = null;  // 悬停计时：进入后要停够 HOVER_DELAY_MS 才展开
-let updateInfo = null;  // 查到的新版本，null = 没有/没查到
-let pillPlacement = null; // 用户拖动后的相对位置，跨分辨率恢复
-let introductionSeen = false;
+let selfWrote = '';
+let pillExpanded = false;
+let pillTargetExpanded = false;
+let pillHoverTimer;
+let pillCollapseTimer;
+let pillPointerInside = false;
+let pillPosition;
+let pillPositionLocked = false;
 let pillProgrammaticMove = false;
-let pillMoveGuardTimer = null;
-let trayFallbackDone = false;  // 菜单栏没位置时只回退一次
+let pillPositionSaveTimer;
+let rendererReady = false;
+let pendingView = 'intro';
+let updateTimer;
 
-function startupLog(message) {
-  try {
-    fs.mkdirSync(path.dirname(STARTUP_LOG_PATH()), { recursive: true });
-    fs.appendFileSync(STARTUP_LOG_PATH(), `${new Date().toISOString()} ${message}\n`);
-  } catch {
-    // 诊断日志不能影响应用启动。
-  }
+function readJSON(file, fallback) {
+  try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return fallback; }
 }
 
-/* ---------------- config（key 用系统钥匙串加密后落盘） ---------------- */
+function writeJSON(file, value) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify(value, null, 2), { mode: 0o600 });
+}
+
+function encryptSecret(value) {
+  if (!value) return '';
+  return safeStorage.isEncryptionAvailable()
+    ? `enc:${safeStorage.encryptString(value).toString('base64')}`
+    : `plain:${value}`;
+}
+
+function decryptSecret(value) {
+  if (!value) return '';
+  try {
+    if (value.startsWith('enc:') && safeStorage.isEncryptionAvailable()) {
+      return safeStorage.decryptString(Buffer.from(value.slice(4), 'base64'));
+    }
+    return value.startsWith('plain:') ? value.slice(6) : value;
+  } catch { return ''; }
+}
 
 function loadConfig() {
-  try {
-    const configPath = [CONFIG_PATH(), ...LEGACY_CONFIG_PATHS()].find((p) => fs.existsSync(p));
-    if (!configPath) throw new Error('config not found');
-    const raw = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    let apiKey = '';
-    if (raw.apiKeyEnc && safeStorage.isEncryptionAvailable()) {
-      try {
-        apiKey = safeStorage.decryptString(Buffer.from(raw.apiKeyEnc, 'base64'));
-      } catch {
-        apiKey = '';
-      }
-    } else if (raw.apiKeyPlain) {
-      apiKey = raw.apiKeyPlain;
-    }
-    if (configPath !== CONFIG_PATH()) {
-      try {
-        fs.mkdirSync(path.dirname(CONFIG_PATH()), { recursive: true });
-        fs.copyFileSync(configPath, CONFIG_PATH());
-      } catch {
-        // 迁移失败不影响本次读取，下一次启动仍会尝试迁移。
-      }
-    }
-    return { ...DEFAULT_CONFIG, ...raw, apiKey };
-  } catch {
-    return { ...DEFAULT_CONFIG };
-  }
+  const saved = readJSON(CONFIG_PATH(), {});
+  return { ...DEFAULT_CONFIG, ...saved, apiKey: decryptSecret(saved.apiKey || '') };
 }
 
-function saveConfig(cfg) {
-  const out = {
-    providerId: cfg.providerId,
-    baseUrl: cfg.baseUrl || '',
-    model: cfg.model || '',
-    hotkey: cfg.hotkey || DEFAULT_CONFIG.hotkey,
-    language: cfg.language || DEFAULT_CONFIG.language,
-    watchClipboard: cfg.watchClipboard !== false,
+function saveConfig(next) {
+  const clean = {
+    ...DEFAULT_CONFIG,
+    providerId: String(next.providerId || DEFAULT_CONFIG.providerId),
+    baseUrl: String(next.baseUrl || '').trim(),
+    model: String(next.model || '').trim(),
+    apiKey: encryptSecret(String(next.apiKey || '').trim()),
+    language: PRESETS.length && String(next.language || 'zh'),
+    appearance: ['system', 'light', 'dark'].includes(next.appearance) ? next.appearance : 'system',
+    watchClipboard: next.watchClipboard !== false,
+    pillMode: ['default', 'formal', 'casual', 'concise', 'learning', 'custom'].includes(next.pillMode) ? next.pillMode : 'default',
+    targetLanguage: ['en', 'fr', 'de', 'ja'].includes(next.targetLanguage) ? next.targetLanguage : 'en',
+    customPrompt: String(next.customPrompt || '').slice(0, 4000),
   };
-  const key = cfg.apiKey || '';
-  if (key && safeStorage.isEncryptionAvailable()) {
-    out.apiKeyEnc = safeStorage.encryptString(key).toString('base64');
-  } else if (key) {
-    out.apiKeyPlain = key; // 钥匙串不可用时的退路
-  }
-  fs.mkdirSync(path.dirname(CONFIG_PATH()), { recursive: true });
-  fs.writeFileSync(CONFIG_PATH(), JSON.stringify(out, null, 2), { mode: 0o600 });
+  writeJSON(CONFIG_PATH(), clean);
+  nativeTheme.themeSource = clean.appearance;
+  buildTrayMenu();
+  applyClipboardWatch(loadConfig());
+  return loadConfig();
 }
 
-function loadUIState() {
+function publicConfig() {
+  const config = loadConfig();
+  return {
+    ...config,
+    presets: PRESETS.map(({ id, label, baseUrl, models, keyHint }) => ({ id, label, baseUrl, models, keyHint })),
+    version: app.getVersion(),
+    repository: REPO,
+  };
+}
+
+function loadFavorites() {
+  const rows = readJSON(FAVORITES_PATH(), []);
+  return Array.isArray(rows) ? rows : [];
+}
+
+function saveFavorites(rows) {
+  writeJSON(FAVORITES_PATH(), rows.slice(0, 2000));
+  return rows;
+}
+
+function csvCell(value) {
+  const text = String(value ?? '').replace(/\r?\n/g, ' ');
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
+async function exportFavorites() {
+  const rows = loadFavorites();
+  const result = await dialog.showSaveDialog(win, {
+    title: '导出收藏',
+    defaultPath: path.join(app.getPath('downloads'), `Saybetter-A lingoisland-Favorites-${new Date().toISOString().slice(0, 10)}.csv`),
+    filters: [{ name: 'CSV', extensions: ['csv'] }],
+  });
+  if (result.canceled || !result.filePath) return { ok: false, canceled: true };
+  const header = ['收藏时间', '模式', '原文', '结果', '参考来源'];
+  const lines = rows.map((item) => [
+    item.createdAt,
+    item.mode,
+    item.source,
+    item.output,
+    (item.sources || []).map((s) => `${s.title} (${s.url})`).join(' | '),
+  ].map(csvCell).join(','));
+  fs.writeFileSync(result.filePath, `\uFEFF${header.map(csvCell).join(',')}\n${lines.join('\n')}`, 'utf8');
+  return { ok: true, filePath: result.filePath };
+}
+
+function decodeEntities(text) {
+  return String(text || '')
+    .replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+}
+
+function tag(xml, name) {
+  const match = xml.match(new RegExp(`<${name}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${name}>`, 'i'));
+  return match ? decodeEntities(match[1].replace(/^<!\[CDATA\[|\]\]>$/g, '').trim()) : '';
+}
+
+async function searchNewsExamples(text, targetLanguage = 'en') {
+  const query = String(text || '').trim().slice(0, 180);
+  if (!query) return [];
+  const locale = {
+    en: { hl: 'en-US', gl: 'US', ceid: 'US:en' },
+    fr: { hl: 'fr', gl: 'FR', ceid: 'FR:fr' },
+    de: { hl: 'de', gl: 'DE', ceid: 'DE:de' },
+    ja: { hl: 'ja', gl: 'JP', ceid: 'JP:ja' },
+  }[targetLanguage] || { hl: 'en-US', gl: 'US', ceid: 'US:en' };
+  const url = `https://news.google.com/rss/search?q=${encodeURIComponent(`"${query}"`)}&hl=${locale.hl}&gl=${locale.gl}&ceid=${locale.ceid}`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 7000);
   try {
-    const raw = JSON.parse(fs.readFileSync(UI_STATE_PATH(), 'utf8'));
-    const p = raw && raw.pillPlacement;
-    return {
-      pillPlacement: p && Number.isFinite(p.centerX) && Number.isFinite(p.topY)
-        ? {
-            displayId: String(p.displayId || ''),
-            centerX: Math.min(1, Math.max(0, p.centerX)),
-            topY: Math.min(1, Math.max(0, p.topY)),
-          }
-        : null,
-      introductionSeen: raw.introductionSeen === true,
-    };
-  } catch {
-    return { pillPlacement: null, introductionSeen: false };
-  }
+    const response = await fetch(url, { signal: controller.signal, headers: { 'user-agent': 'Saybetter-A lingoisland/0.6' } });
+    if (!response.ok) return [];
+    const xml = await response.text();
+    return [...xml.matchAll(/<item>([\s\S]*?)<\/item>/gi)].slice(0, 4).map((match) => {
+      const item = match[1];
+      const source = tag(item, 'source');
+      let title = tag(item, 'title');
+      if (source && title.endsWith(` - ${source}`)) title = title.slice(0, -(source.length + 3));
+      return { title, source, url: tag(item, 'link'), publishedAt: tag(item, 'pubDate') };
+    }).filter((item) => item.title && /^https?:\/\//.test(item.url));
+  } catch { return []; }
+  finally { clearTimeout(timer); }
 }
-
-function saveUIState() {
-  try {
-    fs.mkdirSync(path.dirname(UI_STATE_PATH()), { recursive: true });
-    fs.writeFileSync(UI_STATE_PATH(), JSON.stringify({ pillPlacement, introductionSeen }, null, 2), { mode: 0o600 });
-  } catch {
-    // 位置记忆失败不能影响翻译主流程。
-  }
-}
-
-/* ---------------- window ---------------- */
 
 function createWindow() {
   win = new BrowserWindow({
-    width: 720,
-    height: 520,
+    width: 640,
+    height: 760,
+    minWidth: 560,
+    minHeight: 640,
     show: false,
-    frame: false,
-    resizable: false,
-    transparent: true,
-    vibrancy: 'under-window',
-    visualEffectState: 'active',
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    fullscreenable: false,
+    frame: true,
+    transparent: false,
+    resizable: true,
+    titleBarStyle: 'hiddenInset',
+    trafficLightPosition: { x: 18, y: 18 },
+    backgroundColor: '#f7f7f9',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
     },
   });
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+  win.on('close', (event) => {
+    if (!app.isQuitting) { event.preventDefault(); win.hide(); }
+  });
   win.webContents.on('did-finish-load', () => {
     rendererReady = true;
-    while (pendingSends.length) win.webContents.send(...pendingSends.shift());
-    if (showOnLaunch) {
-      showOnLaunch = false;
-      setTimeout(() => {
-        send('panel:intro');
-        showPanel({ keepOpen: true });
-      }, 150);
-    }
-  });
-  win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
-  // 刚弹出的瞬间会有一次假 blur（焦点还在原来那个 app 上），忽略掉它，
-  // 否则面板会自己立刻收回去。
-  win.on('blur', () => {
-    if (keepPanelOpen) return;
-    if (Date.now() < suppressBlurUntil) return;
-    hidePanel();
-  });
-  // 点关闭只是收起面板，app 继续待在菜单栏。
-  // 但真要退出时（托盘退出、注销、SIGTERM）必须放行，否则进程杀不掉、关机会卡住。
-  win.on('close', (e) => {
-    if (isQuitting) return;
-    e.preventDefault();
-    hidePanel();
+    showView(pendingView || 'intro', true);
   });
 }
 
-// 启动瞬间就按快捷键的话，渲染进程可能还没就绪，这时先攒着，加载完再发。
-function send(channel, payload) {
-  if (!win || win.isDestroyed() || win.webContents.isDestroyed()) return;
-  if (!rendererReady) {
-    pendingSends.push([channel, payload]);
-    return;
-  }
-  try {
-    win.webContents.send(channel, payload);
-  } catch {
-    // 帧可能正在销毁（退出中），丢掉就行
-  }
+function positionNearTray() {
+  if (!tray || !win) return;
+  const trayBounds = tray.getBounds();
+  const display = require('electron').screen.getDisplayNearestPoint({ x: trayBounds.x, y: trayBounds.y });
+  const area = display.workArea;
+  const bounds = win.getBounds();
+  const x = Math.min(Math.max(Math.round(trayBounds.x + trayBounds.width / 2 - bounds.width / 2), area.x + 12), area.x + area.width - bounds.width - 12);
+  const y = area.y + 10;
+  win.setPosition(x, y, false);
 }
 
-function showPanel({ keepOpen = false } = {}) {
+function showView(view, force = false) {
+  pendingView = view;
   if (!win) return;
-  keepPanelOpen = keepOpen;
-  // 出现在鼠标所在的那块屏幕上，靠上 1/4 处 —— Spotlight 的位置感
-  const { workArea } = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
-  const [w, h] = win.getSize();
-  win.setPosition(
-    Math.round(workArea.x + (workArea.width - w) / 2),
-    Math.round(workArea.y + workArea.height * 0.22),
-  );
-  suppressBlurUntil = Date.now() + 2000;
-  win.show();
-  // dock 图标是隐藏的，不 steal 焦点的话键盘输入不会进到面板里
-  app.focus({ steal: true });
-  win.focus();
-  send('panel:shown', { clipboard: clipboard.readText().slice(0, 5000) });
-}
-
-function hidePanel() {
-  keepPanelOpen = false;
-  if (currentAbort) {
-    currentAbort.abort();
-    currentAbort = null;
+  if (rendererReady) win.webContents.send('app:view', view);
+  positionNearTray();
+  if (force || !win.isVisible()) {
+    win.show();
+    win.focus();
   }
-  if (win && win.isVisible()) win.hide();
 }
 
-function togglePanel() {
-  // 浮窗正待命时，快捷键的意思是「就翻这段」，不用把鼠标挪到屏幕顶上去。
-  // （PhrasePeek 是连按两次复制来实现同一件事，但那要读 NSPasteboard 的
-  //   changeCount —— 复制同一段文字时内容没变，轮询式的剪贴板监听看不到，
-  //   Electron 也没暴露这个接口，所以这里用快捷键代替。）
-  if (win && win.isVisible()) hidePanel();
-  else showPanel();
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), Math.max(min, max));
 }
 
-/* ---------------- 灵动岛浮窗 ---------------- */
-
-function clamp(n, lo, hi) {
-  return Math.min(Math.max(n, lo), Math.max(lo, hi));
-}
-
-function displayForPlacement() {
-  if (pillPlacement) {
-    const saved = screen.getAllDisplays().find((d) => String(d.id) === pillPlacement.displayId);
-    if (saved) return saved;
-  }
-  return screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
-}
-
-// 默认放在当前屏幕顶部正中。用户拖动过之后，用屏幕内的相对位置恢复，
-// 即使分辨率或显示器排列变了也不会飘出屏幕。
-function positionPill(w, h) {
+function keepPillVisible() {
   if (!pillWin || pillWin.isDestroyed()) return;
-  const d = displayForPlacement();
-  const area = d.bounds;
-  let x;
-  let y;
-  if (pillPlacement) {
-    x = Math.round(area.x + area.width * pillPlacement.centerX - w / 2);
-    y = Math.round(area.y + area.height * pillPlacement.topY);
-  } else {
-    x = Math.round(area.x + (area.width - w) / 2);
-    y = Math.round(d.workArea.y); // 让开菜单栏/刘海
-  }
-  x = clamp(x, area.x + 8, area.x + area.width - w - 8);
-  y = clamp(y, area.y + 8, area.y + area.height - h - 8);
-
-  pillProgrammaticMove = true;
-  if (pillMoveGuardTimer) clearTimeout(pillMoveGuardTimer);
-  pillWin.setBounds({ x, y, width: w, height: h });
-  pillMoveGuardTimer = setTimeout(() => { pillProgrammaticMove = false; }, 120);
-}
-
-function rememberPillPosition() {
-  if (!pillWin || pillWin.isDestroyed() || pillProgrammaticMove) return;
-  const b = pillWin.getBounds();
-  const d = screen.getDisplayMatching(b);
-  pillPlacement = {
-    displayId: String(d.id),
-    centerX: (b.x + b.width / 2 - d.bounds.x) / d.bounds.width,
-    topY: (b.y - d.bounds.y) / d.bounds.height,
-  };
-  saveUIState();
-}
-
-function resetPillPosition() {
-  pillPlacement = null;
-  saveUIState();
-  if (pillWin && !pillWin.isDestroyed()) {
-    positionPill(pillExpanded ? PILL_EXPANDED_W : PILL_W, pillExpanded ? PILL_EXPANDED_H : PILL_H);
-  }
-}
-
-// 让浮窗跟着你走：所有桌面（Space）、全屏应用之上都能看到。
-// macOS 上窗口每次 hide/show 之后 collectionBehavior 可能被重置，
-// 所以不能只在创建时设一次，每次显示都要重新声明。
-function keepPillEverywhere() {
-  if (!pillWin || pillWin.isDestroyed()) return;
-  pillWin.setVisibleOnAllWorkspaces(true, {
-    visibleOnFullScreen: true,
-    skipTransformProcessType: true, // 不加这个，切换时 app 会被短暂拉成前台
-  });
+  pillWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
   pillWin.setAlwaysOnTop(true, 'screen-saver');
+}
+
+function loadPillPosition() {
+  const saved = readJSON(PILL_POSITION_PATH(), null);
+  if (!saved || ![saved.x, saved.y].every(Number.isFinite)) return null;
+  return { x: Math.round(saved.x), y: Math.round(saved.y) };
+}
+
+function savePillPosition() {
+  if (!pillWin || pillWin.isDestroyed() || pillProgrammaticMove) return;
+  const { x, y, width } = pillWin.getBounds();
+  pillPosition = { x: x + Math.round((width - PILL_WIDTH) / 2), y };
+  pillPositionLocked = true;
+  clearTimeout(pillPositionSaveTimer);
+  pillPositionSaveTimer = setTimeout(() => writeJSON(PILL_POSITION_PATH(), pillPosition), 180);
+}
+
+function notchCenteredPosition(width, height) {
+  const cursor = screen.getCursorScreenPoint();
+  const display = screen.getDisplayNearestPoint(cursor);
+  const bounds = display.bounds;
+  const area = display.workArea;
+  return {
+    x: clamp(Math.round(bounds.x + (bounds.width - width) / 2), area.x + 10, area.x + area.width - width - 10),
+    y: clamp(Math.round(area.y + 8), area.y + 8, area.y + area.height - height - 8),
+  };
+}
+
+function positionPill(width, height) {
+  if (!pillWin || pillWin.isDestroyed()) return;
+  const current = pillWin.getBounds();
+  const centerX = current.x + current.width / 2;
+  const centerY = current.y + current.height / 2;
+  const display = pillPositionLocked
+    ? screen.getDisplayNearestPoint({ x: Math.round(centerX), y: Math.round(centerY) })
+    : screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+  const area = display.workArea;
+  let target;
+  if (pillPositionLocked && pillPosition) {
+    target = {
+      x: clamp(Math.round(pillPosition.x + (PILL_WIDTH - width) / 2), area.x + 10, area.x + area.width - width - 10),
+      y: clamp(Math.round(pillPosition.y), area.y + 8, area.y + area.height - height - 8),
+    };
+  } else {
+    target = notchCenteredPosition(width, height);
+  }
+  pillProgrammaticMove = true;
+  pillWin.setBounds({ ...target, width, height }, false);
+  setTimeout(() => { pillProgrammaticMove = false; }, 120);
+  pillPosition = { x: target.x + Math.round((width - PILL_WIDTH) / 2), y: target.y };
 }
 
 function createPill() {
   pillWin = new BrowserWindow({
-    width: PILL_W,
-    height: PILL_H,
+    width: PILL_WIDTH,
+    height: PILL_HEIGHT,
     type: 'panel',
     show: false,
     frame: false,
     transparent: true,
-    // 原生毛玻璃。不能用 CSS backdrop-filter —— 那只能模糊页面内部的东西，
-    // 模糊不了窗口背后的桌面内容；真玻璃必须走 macOS 的 vibrancy。
-    // 'popover' 是浅色系材质；页面里再叠一层白，深色模式下也保持浅色。
-    // popover 是语义材质，会随 macOS 浅色/深色外观自适应。
-    vibrancy: 'popover',
-    visualEffectState: 'active',
+    backgroundColor: '#00000000',
     resizable: false,
-    // 不能设 movable: false —— macOS 上它连 setBounds 的程序化移动一起挡掉，
-    // 结果窗口停在默认的「屏幕正中」，永远到不了刘海下面。
     movable: true,
-    // 必须 focusable，否则点击落不进窗口。靠 showInactive() 保证不主动抢焦点。
     focusable: true,
-    // macOS 上非活动窗口的第一次点击默认只用来激活窗口、事件被吞掉。
-    // 浮窗永远是非活动的（你人在别的 app 里），不开这个就永远点不动。
     acceptFirstMouse: true,
     skipTaskbar: true,
     hiddenInMissionControl: true,
-    hasShadow: true,
+    hasShadow: false,
     fullscreenable: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload-pill.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
     },
   });
-  keepPillEverywhere(); // screen-saver 层级 + 所有桌面可见
-  pillWin.on('moved', rememberPillPosition);
+  pillPosition = loadPillPosition();
+  pillPositionLocked = Boolean(pillPosition);
+  pillWin.on('moved', savePillPosition);
+  pillWin.on('move', savePillPosition);
+  pillWin.webContents.once('did-finish-load', () => {
+    pillWin.hide();
+    keepPillVisible();
+    positionPill(PILL_WIDTH, PILL_HEIGHT);
+    pillSend('pill:expanded', false);
+  });
   pillWin.loadFile(path.join(__dirname, 'renderer', 'pill.html'));
 }
 
 function pillSend(channel, payload) {
   if (!pillWin || pillWin.isDestroyed() || pillWin.webContents.isDestroyed()) return;
-  try {
-    pillWin.webContents.send(channel, payload);
-  } catch {
-    /* 正在销毁，忽略 */
-  }
+  pillWin.webContents.send(channel, payload);
 }
 
-// 展开 / 收起统一走这里：主进程说了算，渲染进程只负责画。
-function setPillExpanded(next) {
-  if (pillExpanded === next) return;
-  pillExpanded = next;
-  if (next) {
-    positionPill(PILL_EXPANDED_W, PILL_EXPANDED_H);
-  } else {
-    positionPill(PILL_W, PILL_H);
-  }
-  pillSend('pill:expanded', next);
+function pointInsideBounds(point, bounds) {
+  return point.x >= bounds.x && point.x < bounds.x + bounds.width && point.y >= bounds.y && point.y < bounds.y + bounds.height;
 }
 
-// macOS 上后台 app 的窗口收不到可靠的 mouseenter/mouseleave —— 浮窗属于 SayBetter，
-// 而前台是你正在用的那个 app。所以直接轮询系统光标位置，跟窗口矩形比。
-function startCursorWatch() {
-  stopCursorWatch();
-  cursorTimer = setInterval(() => {
+function syncPillExpanded(value) {
+  if (!pillWin || pillWin.isDestroyed()) return;
+  pillExpanded = value;
+  pillTargetExpanded = value;
+  pillSend('pill:expanded', value);
+}
+
+function applyPillSize(value) {
+  if (!pillWin || pillWin.isDestroyed()) return;
+  const width = value ? PILL_EXPANDED_WIDTH : PILL_WIDTH;
+  const height = value ? PILL_EXPANDED_HEIGHT : PILL_HEIGHT;
+  const current = pillWin.getBounds();
+  positionPill(width, height);
+  syncPillExpanded(value);
+}
+
+function schedulePillExpanded(value) {
+  if (!pillWin || pillWin.isDestroyed()) return;
+  if (value) {
+    clearTimeout(pillCollapseTimer);
+    pillCollapseTimer = null;
+    pillTargetExpanded = true;
+    applyPillSize(true);
+    return;
+  }
+  pillTargetExpanded = false;
+  clearTimeout(pillCollapseTimer);
+  pillCollapseTimer = setTimeout(() => {
+    pillCollapseTimer = null;
+    if (!pillPointerInside && !pillTargetExpanded) applyPillSize(false);
+  }, PILL_COLLAPSE_DELAY_MS);
+}
+
+function startPillHoverWatch() {
+  if (pillHoverTimer) clearInterval(pillHoverTimer);
+  pillHoverTimer = setInterval(() => {
     if (!pillWin || pillWin.isDestroyed() || !pillWin.isVisible()) return;
-    const p = screen.getCursorScreenPoint();
-    const b = pillWin.getBounds();
-    // 收起态很扁，往下多给一点缓冲，免得刚要碰到就滑过去了
-    const pad = pillExpanded ? 0 : 10;
-    const inside =
-      p.x >= b.x && p.x <= b.x + b.width &&
-      p.y >= b.y - 4 && p.y <= b.y + b.height + pad;
-
-    // 进入后要停够 HOVER_DELAY_MS 才展开：鼠标只是路过顶部时不该炸开一整块面板。
-    // 移开只收成胶囊，不隐藏 —— 结果得一直在那等着你。
-    if (inside) {
-      if (!pillExpanded && !hoverTimer) {
-        pillSend('pill:dwell', HOVER_DELAY_MS);   // 让界面开始画那条进度
-        hoverTimer = setTimeout(() => {
-          hoverTimer = null;
-          setPillExpanded(true);
-        }, HOVER_DELAY_MS);
-      }
-    } else {
-      if (hoverTimer) {
-        clearTimeout(hoverTimer);
-        hoverTimer = null;
-        pillSend('pill:dwell-cancel');            // 中途移开就把进度收回去
-      }
-      if (!pillPinned && pillExpanded) setPillExpanded(false);
-    }
-  }, 120);
+    const inside = pointInsideBounds(screen.getCursorScreenPoint(), pillWin.getBounds());
+    if (inside === pillPointerInside) return;
+    pillPointerInside = inside;
+    schedulePillExpanded(inside);
+  }, PILL_HOVER_POLL_MS);
 }
 
-function stopCursorWatch() {
-  if (cursorTimer) clearInterval(cursorTimer);
-  cursorTimer = null;
+function stopPillHoverWatch() {
+  if (pillHoverTimer) clearInterval(pillHoverTimer);
+  if (pillCollapseTimer) clearTimeout(pillCollapseTimer);
+  pillHoverTimer = null;
+  pillCollapseTimer = null;
+  pillPointerInside = false;
+}
+
+function setPillExpanded(value) {
+  if (!pillWin || pillWin.isDestroyed()) return;
+  schedulePillExpanded(Boolean(value));
 }
 
 function hidePill() {
-  if (hoverTimer) { clearTimeout(hoverTimer); hoverTimer = null; }
+  pillAbort?.abort();
+  pillAbort = null;
+  stopPillHoverWatch();
   pillExpanded = false;
-  pillPinned = false;
-  stopCursorWatch();
-  if (pillAbort) { pillAbort.abort(); pillAbort = null; }
-  if (pillWin && !pillWin.isDestroyed() && pillWin.isVisible()) pillWin.hide();
+  pillTargetExpanded = false;
+  if (pillWin && !pillWin.isDestroyed()) pillWin.hide();
 }
 
-// 浮窗不再自己消失。只要还在处理中/已出结果，它就一直挂在刘海下面，
-// 鼠标移开只是收成一颗胶囊。真正关掉靠：✕、esc、或者下一次复制。
-
-// 非英文（含中日韩、泰、越等）→ 翻译；否则是英文校对。
-// 只用来显示方向标，真正的判断仍由模型自己做。
-function detectMode(text) {
-  const nonLatin = (text.match(/[^\u0000-\u024F\s\p{P}\d]/gu) || []).length;
-  return nonLatin > text.length * 0.15 ? 'translate' : 'proofread';
-}
-
-async function runInPill(text) {
-  const cfg = loadConfig();
+async function runInPill(text, requestedMode) {
   if (!pillWin || pillWin.isDestroyed()) return;
-
-  pillSend('pill:start', { language: cfg.language || 'zh', mode: detectMode(text), source: text.slice(0, 300) });
-  setTrayBusy(true);
+  const config = loadConfig();
+  const mode = ['default', 'formal', 'casual', 'concise', 'learning'].includes(requestedMode) ? requestedMode : ['default', 'formal', 'casual', 'concise', 'learning'].includes(config.pillMode) ? config.pillMode : 'default';
+  pillAbort?.abort();
+  const controller = new AbortController();
+  pillAbort = controller;
+  pillBundleText = text;
+  pillBundleOutput = '';
+  pillBundleSources = [];
+  stopPillHoverWatch();
   pillExpanded = false;
-  pillPinned = false;
+  pillTargetExpanded = false;
+  pillSend('pill:start', { source: text.slice(0, 300), mode, targetLanguage: config.targetLanguage || 'en', bundled: true });
+  positionPill(PILL_WIDTH, PILL_HEIGHT);
   pillSend('pill:expanded', false);
-  // 先摆好再显示 —— 否则窗口会先在上一次的位置（首次是屏幕正中）闪一帧再跳过来。
-  positionPill(PILL_W, PILL_H);
   pillWin.showInactive();
-  keepPillEverywhere();
-  // 显示后再摆一次：窗口还隐藏时设的 bounds 在 macOS 上不一定生效。
-  positionPill(PILL_W, PILL_H);
-  // 再补一次，兜住系统的异步重排（切空间、接显示器时容易发生）。
-  setTimeout(() => {
-    if (pillWin && !pillWin.isDestroyed() && pillWin.isVisible() && !pillExpanded) {
-      keepPillEverywhere();
-      positionPill(PILL_W, PILL_H);
-    }
-  }, 250);
-  startCursorWatch();
-
-  if (pillAbort) pillAbort.abort();
-  const ac = new AbortController();
-  pillAbort = ac;
+  keepPillVisible();
+  positionPill(PILL_WIDTH, PILL_HEIGHT);
+  startPillHoverWatch();
   try {
-    await streamCheck({
-      config: cfg,
+    const output = await streamCheck({
+      config,
       text,
       tone: 'default',
-      variant: 'pill', // 浮窗要四种语气并列
-      signal: ac.signal,
-      onDelta: (d) => pillSend('pill:delta', d),
+      targetLanguage: config.targetLanguage || 'en',
+      variant: 'pill-bundle',
+      signal: controller.signal,
+      onDelta: (chunk) => pillSend('pill:delta', chunk),
     });
-    if (!ac.signal.aborted) {
-      pillSend('pill:done');
-    }
-  } catch (err) {
-    if (!ac.signal.aborted) {
-      pillSend('pill:error', String(err.message || err));
-    }
+    pillBundleOutput = output;
+    const queryMatch = output.match(/<!--\s*NEWS_QUERY\s*:\s*([^>]+?)\s*-->/i);
+    pillBundleSources = await searchNewsExamples(queryMatch ? queryMatch[1].trim() : text, config.targetLanguage || 'en');
+    if (!controller.signal.aborted) pillSend('pill:done', { sources: pillBundleSources, output });
+  } catch (error) {
+    if (!controller.signal.aborted) pillSend('pill:error', error?.message || '生成失败');
   } finally {
-    if (pillAbort === ac) pillAbort = null;
-    setTrayBusy(false);
+    if (pillAbort === controller) pillAbort = null;
   }
 }
 
-/* ---------------- 剪贴板监听 ---------------- */
-// 用轮询而不是注册 ⌘C 全局快捷键：注册会把复制这个动作本身截胡，
-// 别的 app 就复制不了了。轮询不需要任何权限，也不干扰系统。
-
-function shouldWatch(text) {
-  const t = (text || '').trim();
-  if (!t) return false;
-  if (t.length < 2) return false;
-  if (t.length > MAX_WATCH_CHARS) return false; // 整篇文档不自动送
-  if (t === selfWrote.trim()) return false;     // 自己刚写进去的，别成环
-  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(t)) return false; // 纯 URL，没什么可改的
-  if (/^[\w.-]+@[\w.-]+\.\w+$/.test(t)) return false;   // 纯邮箱地址
+function shouldWatchClipboard(text) {
+  const value = String(text || '').trim();
+  if (value.length < 2 || value.length > MAX_CLIPBOARD_CHARS) return false;
+  if (value === selfWrote.trim()) return false;
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(value)) return false;
+  if (/^[\w.-]+@[\w.-]+\.\w+$/.test(value)) return false;
   return true;
 }
 
 function startClipboardWatch() {
   stopClipboardWatch();
-  lastClipboard = clipboard.readText(); // 起点：不处理启动前就在里面的内容
+  lastClipboard = clipboard.readText();
   clipboardTimer = setInterval(() => {
-    let cur;
-    try {
-      cur = clipboard.readText();
-    } catch {
-      return;
-    }
-    if (cur === lastClipboard) return;
-    lastClipboard = cur;
-    if (!loadConfig().watchClipboard) return;
-    if (!shouldWatch(cur)) return;
-    runInPill(cur.trim());
+    let value;
+    try { value = clipboard.readText(); } catch { return; }
+    if (value === lastClipboard) return;
+    lastClipboard = value;
+    if (!loadConfig().watchClipboard || !shouldWatchClipboard(value)) return;
+    runInPill(value.trim());
   }, CLIPBOARD_POLL_MS);
 }
 
@@ -535,353 +498,321 @@ function stopClipboardWatch() {
   clipboardTimer = null;
 }
 
-function applyClipboardWatch(cfg) {
-  if (cfg.watchClipboard !== false) startClipboardWatch();
-  else { stopClipboardWatch(); hidePill(); }
+function applyClipboardWatch(config) {
+  if (config.watchClipboard !== false) startClipboardWatch();
+  else {
+    stopClipboardWatch();
+    pillAbort?.abort();
+    pillAbort = null;
+    hidePill();
+  }
 }
 
-/* ---------------- tray ---------------- */
+function setAppearance(value) {
+  const cfg = loadConfig();
+  saveConfig({ ...cfg, appearance: value });
+  if (rendererReady) win.webContents.send('config:changed', publicConfig());
+}
 
-// 菜单栏用单色模板符号，macOS 会根据菜单栏背景自动反色。
-function trayIcon(busy = false) {
-  const file = busy ? 'traySayBetterBusyTemplate.png' : 'traySayBetterTemplate.png';
-  const image = nativeImage.createFromPath(path.join(__dirname, file));
+function buildTrayMenu() {
+  if (!tray) return;
+  const config = loadConfig();
+  const provider = PRESETS.find((p) => p.id === config.providerId);
+  const keyReady = provider?.id === 'ollama' || Boolean(config.apiKey);
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: '打开 Saybetter-A lingoisland', click: () => showView('translate', true) },
+    { label: 'Introduction', click: () => showView('intro', true) },
+    { type: 'separator' },
+    { label: '更换 API Key…', sublabel: keyReady ? `${provider?.label || '模型'} · 已配置` : '尚未配置', click: () => showView('settings', true) },
+    { label: '复制后自动显示灵动岛', type: 'checkbox', checked: config.watchClipboard !== false, click: (item) => saveConfig({ ...config, watchClipboard: item.checked }) },
+    { label: '收藏', click: () => showView('favorites', true) },
+    { label: '导出收藏…', click: async () => { const result = await exportFavorites(); if (rendererReady) win.webContents.send('export:done', result); } },
+    { type: 'separator' },
+    {
+      label: '外观', submenu: [
+        { label: '跟随系统', type: 'radio', checked: config.appearance === 'system', click: () => setAppearance('system') },
+        { label: '浅色', type: 'radio', checked: config.appearance === 'light', click: () => setAppearance('light') },
+        { label: '深色', type: 'radio', checked: config.appearance === 'dark', click: () => setAppearance('dark') },
+      ],
+    },
+    { label: '关于 Saybetter-A lingoisland', click: () => showView('about', true) },
+    { label: '问题反馈…', click: () => shell.openExternal('mailto:xujianghao02@gmail.com?subject=Saybetter-A lingoisland%20Feedback') },
+    { type: 'separator' },
+    { label: '退出 Saybetter-A lingoisland', role: 'quit' },
+  ]));
+}
+
+function trayLog(message, detail = '') {
+  const line = `[${new Date().toISOString()}] ${message}${detail ? ` ${detail}` : ''}\n`;
+  console.log(`[tray] ${message}`, detail);
+  try { fs.appendFileSync(path.join(app.getPath('userData'), 'tray.log'), line, 'utf8'); } catch {}
+}
+
+function handleNativeStatusCommand(rawUrl) {
+  try {
+    const action = new URL(rawUrl).searchParams.get('action') || '';
+    if (action.startsWith('show:')) return showView(action.slice(5), true);
+    if (action === 'feedback') return shell.openExternal('mailto:xujianghao02@gmail.com?subject=Saybetter-A lingoisland%20Feedback');
+    if (action === 'export:favorites') return exportFavorites();
+    if (action === 'clipboard:pause' || action === 'clipboard:resume') {
+      const next = { ...loadConfig(), watchClipboard: action === 'clipboard:resume' };
+      saveConfig(next);
+      return;
+    }
+    if (action.startsWith('language:')) {
+      const targetLanguage = action.slice(9);
+      if (['en', 'fr', 'de', 'ja'].includes(targetLanguage)) saveConfig({ ...loadConfig(), targetLanguage });
+      return;
+    }
+    if (action.startsWith('appearance:')) return setAppearance(action.slice(11));
+    if (action === 'quit') return app.quit();
+  } catch (error) {
+    trayLog('native-command-failed', error?.message || String(error));
+  }
+}
+
+function startNativeStatusItem() {
+  if (process.platform !== 'darwin') return createTray();
+  const helper = path.join(process.resourcesPath, 'native', 'LingoIslandStatus');
+  const developmentHelper = path.join(__dirname, 'native', 'bin', 'LingoIslandStatus');
+  const binary = app.isPackaged ? helper : developmentHelper;
+  if (!fs.existsSync(binary)) {
+    trayLog('native-helper-missing', binary);
+    return createTray();
+  }
+  nativeStatusProcess?.kill();
+  const statusArgs = loadConfig().watchClipboard === false ? ['paused'] : [];
+  nativeStatusProcess = spawn(binary, statusArgs, { detached: false, stdio: 'ignore' });
+  nativeStatusProcess.once('spawn', () => trayLog('native-helper-started', JSON.stringify({ pid: nativeStatusProcess.pid, binary })));
+  nativeStatusProcess.once('exit', (code, signal) => {
+    trayLog('native-helper-exited', JSON.stringify({ code, signal }));
+    nativeStatusProcess = null;
+    if (!app.isQuitting) setTimeout(startNativeStatusItem, 800);
+  });
+  nativeStatusProcess.once('error', (error) => {
+    trayLog('native-helper-error', error?.message || String(error));
+    nativeStatusProcess = null;
+    createTray();
+  });
+}
+
+function trayIcon() {
+  const image = nativeImage.createFromPath(path.join(__dirname, 'trayLTemplate.png'));
+  if (image.isEmpty()) throw new Error('trayLTemplate.png could not be loaded');
   image.setTemplateImage(true);
   return image;
 }
 
-// 忙碌态仍用同尺寸模板符号，避免菜单栏宽度在处理时跳动。
-function setTrayBusy(busy) {
-  if (!tray || tray.isDestroyed()) return;
+function trayBoundsAreVisible(bounds) {
+  if (!bounds || bounds.width <= 0 || bounds.height <= 0) return false;
+  return screen.getAllDisplays().some(({ bounds: display }) => (
+    bounds.x >= display.x
+    && bounds.x + bounds.width <= display.x + display.width
+    && bounds.y >= display.y - 2
+    && bounds.y <= display.y + 40
+  ));
+}
+
+function createTray() {
   try {
-    tray.setImage(trayIcon(busy));
-    tray.setToolTip(busy ? 'SayBetter 正在处理' : 'SayBetter');
-  } catch {
-    /* 托盘可能已销毁 */
-  }
-}
-
-// 菜单栏下拉菜单。只有一份构建逻辑 —— 之前有两份几乎一样的拷贝，
-// 改一处忘另一处就会不一致。
-function buildTrayMenu() {
-  if (!tray || tray.isDestroyed()) return;
-  const cfg = loadConfig();
-  const watching = cfg.watchClipboard !== false;
-  const provider = PRESETS.find((p) => p.id === cfg.providerId);
-  const keyReady = cfg.providerId === 'ollama' || Boolean((cfg.apiKey || '').trim());
-  const keyStatus = keyReady ? '已配置' : '未配置';
-
-  tray.setContextMenu(Menu.buildFromTemplate([
-    ...(updateInfo
-      ? [{ label: `有新版本 ${updateInfo.version}，点击下载`, click: () => shell.openExternal(updateInfo.url) },
-         { type: 'separator' }]
-      : []),
-
-    { label: '翻译剪贴板内容', accelerator: cfg.hotkey || 'Alt+Space', click: translateClipboardNow },
-    {
-      // 最常用的开关，不该藏在设置页里
-      label: '暂停复制翻译',
-      type: 'checkbox',
-      checked: !watching,
-      click: () => {
-        const next = { ...loadConfig(), watchClipboard: !watching };
-        saveConfig(next);
-        applyClipboardWatch(loadConfig());
-        buildTrayMenu();                     // 勾选状态要立刻反映出来
-        send('config:changed', { watchClipboard: !watching });
-      },
-    },
-
-    { type: 'separator' },
-
-    { label: 'Introduction / 使用介绍…', click: openIntroduction },
-    {
-      label: `API Key · ${keyStatus}${provider ? ` · ${provider.label}` : ''}…`,
-      click: openApiKeySettings,
-    },
-    { label: '偏好设置…', accelerator: 'CommandOrControl+,', click: openSettings },
-    { label: '将浮窗放回屏幕顶部', click: resetPillPosition },
-    { label: '打开配置文件夹', click: () => shell.showItemInFolder(CONFIG_PATH()) },
-
-    { type: 'separator' },
-
-    { label: `关于 SayBetter ${app.getVersion()}`, click: () => shell.openExternal(`https://github.com/${REPO}`) },
-
-    { type: 'separator' },
-
-    { label: '退出 SayBetter', accelerator: 'CommandOrControl+Q', click: () => app.quit() },
-  ]));
-}
-
-function openSettings() {
-  send('panel:settings');
-  showPanel({ keepOpen: true });
-}
-
-function openApiKeySettings() {
-  send('panel:api-key');
-  showPanel({ keepOpen: true });
-}
-
-function openIntroduction() {
-  send('panel:intro');
-  showPanel({ keepOpen: true });
-}
-
-// 拿当前剪贴板内容跑一轮；没有可处理的内容就打开输入面板
-function translateClipboardNow() {
-  const text = (clipboard.readText() || '').trim();
-  if (shouldWatch(text)) {
-    lastClipboard = clipboard.readText();   // 别让轮询紧接着再触发一次
-    runInPill(text);
-  } else {
-    showPanel();
-  }
-}
-
-// macOS 上托盘菜单里的 accelerator 只是显示用的，不会真的触发。
-// 想让 ⌘, 和 ⌘Q 生效，得有一份真正的应用菜单。
-// 注意：Edit 那一组必须留着，否则设置页里 ⌘V 粘贴 API Key 都会失灵。
-function buildAppMenu() {
-  Menu.setApplicationMenu(Menu.buildFromTemplate([
-    {
-      label: 'SayBetter',
-      submenu: [
-        { label: `关于 SayBetter ${app.getVersion()}`, click: () => shell.openExternal(`https://github.com/${REPO}`) },
-        { type: 'separator' },
-        { label: 'Introduction / 使用介绍…', click: openIntroduction },
-        { label: 'API Key…', click: openApiKeySettings },
-        { label: '偏好设置…', accelerator: 'CommandOrControl+,', click: openSettings },
-        { type: 'separator' },
-        { role: 'hide', label: '隐藏 SayBetter' },
-        { role: 'hideOthers', label: '隐藏其他' },
-        { role: 'unhide', label: '全部显示' },
-        { type: 'separator' },
-        { label: '退出 SayBetter', accelerator: 'CommandOrControl+Q', click: () => app.quit() },
-      ],
-    },
-    {
-      label: '编辑',
-      submenu: [
-        { role: 'undo', label: '撤销' },
-        { role: 'redo', label: '重做' },
-        { type: 'separator' },
-        { role: 'cut', label: '剪切' },
-        { role: 'copy', label: '拷贝' },
-        { role: 'paste', label: '粘贴' },
-        { role: 'selectAll', label: '全选' },
-      ],
-    },
-  ]));
-}
-
-function buildTray() {
-  const icon = trayIcon();
-  startupLog(`tray icon empty=${icon.isEmpty()} size=${JSON.stringify(icon.getSize())}`);
-  tray = new Tray(icon);
-  // 不设 setTitle：状态项宽度 = 图标宽度 + 16pt，加上文字要占 100pt，
-  // 菜单栏排满时根本挤不进去（刘海底下 macOS 不会放状态项）。纯图标 16px 宽 → 32pt。
-  tray.setToolTip('SayBetter');
-  buildTrayMenu();
-  setTimeout(checkTrayPlaced, 500);
-  setTimeout(checkTrayPlaced, 3000);   // 有的第三方菜单栏管理器会晚一步重排
-  // 使用 macOS 标准状态项行为：左击展开菜单，常用操作放在第一项。
-}
-
-// 菜单栏塞满时，macOS 既不报错也不显示图标，只是不给这个状态项分配位置——
-// 此时 getBounds() 返回的不是菜单栏里的坐标。真放上去了 y 应该贴着屏幕顶部。
-function trayIsPlaced() {
-  if (!tray || tray.isDestroyed()) return false;
-  const b = tray.getBounds();
-  return b.width > 0 && b.y < 40;
-}
-
-function checkTrayPlaced() {
-  if (!tray || tray.isDestroyed() || trayFallbackDone) return;
-  if (trayIsPlaced()) {
-    // 多屏时状态项可能落在外接屏的菜单栏上，只看 y 会误以为"用户能看见"。
-    const b = tray.getBounds();
-    const d = screen.getDisplayNearestPoint({ x: b.x, y: b.y });
-    const primary = screen.getPrimaryDisplay();
-    const which = d.id === primary.id ? '主屏' : `外接屏(id=${d.id})`;
-    startupLog(`tray ready bounds=${JSON.stringify(b)} 落在${which}`);
-    return;
-  }
-  startupLog(`tray NOT placed bounds=${JSON.stringify(tray.getBounds())} —— 菜单栏没空位，回退到程序坞`);
-  trayFallbackDone = true;
-  // 否则用户除了快捷键就没有任何入口了。
-  if (process.platform === 'darwin') {
-    app.setActivationPolicy('regular');
-    if (app.dock) app.dock.show();
-  }
-  try {
-    const n = new Notification({
-      title: 'SayBetter 已在后台运行',
-      body: '菜单栏没有空位放图标，已改从程序坞进入。腾出菜单栏空间后重启即可恢复。',
-      silent: true,
-    });
-    n.on('click', () => showPanel());
-    n.show();
-  } catch { /* 通知失败不影响主功能 */ }
-}
-
-/* ---------------- hotkey ---------------- */
-
-function registerHotkey(accel) {
-  globalShortcut.unregisterAll();
-  if (!accel) return { ok: false, error: '快捷键为空' };
-  try {
-    const ok = globalShortcut.register(accel, togglePanel);
-    return ok ? { ok: true } : { ok: false, error: `${accel} 被别的程序占用了` };
-  } catch (e) {
-    return { ok: false, error: String(e.message || e) };
-  }
-}
-
-/* ---------------- IPC ---------------- */
-
-ipcMain.handle('config:get', () => ({ config: loadConfig(), presets: PRESETS }));
-
-ipcMain.handle('config:set', (_e, cfg) => {
-  saveConfig(cfg);
-  const r = registerHotkey(cfg.hotkey);
-  buildTrayMenu();
-  applyClipboardWatch(loadConfig());
-  return r;
-});
-
-
-ipcMain.handle('check:run', async (e, { text, tone }) => {
-  if (currentAbort) currentAbort.abort();
-  const ac = new AbortController();
-  currentAbort = ac;
-  const wc = e.sender;
-  try {
-    await streamCheck({
-      config: loadConfig(),
-      text,
-      tone,
-      signal: ac.signal,
-      onDelta: (d) => {
-        if (!wc.isDestroyed()) wc.send('check:delta', d);
-      },
-    });
-    if (!wc.isDestroyed()) wc.send('check:done');
-    return { ok: true };
-  } catch (err) {
-    if (ac.signal.aborted) return { ok: false, aborted: true };
-    if (!wc.isDestroyed()) wc.send('check:error', String(err.message || err));
-    return { ok: false, error: String(err.message || err) };
-  } finally {
-    if (currentAbort === ac) currentAbort = null;
-  }
-});
-
-ipcMain.handle('check:cancel', () => {
-  if (currentAbort) currentAbort.abort();
-  currentAbort = null;
-});
-
-ipcMain.handle('update:check', async () => {
-  const info = await checkForUpdate(app.getVersion());
-  if (info && info.hasUpdate) {
-    updateInfo = info;
+    if (tray && !tray.isDestroyed()) tray.destroy();
+    tray = new Tray(trayIcon());
+    tray.setToolTip('Saybetter-A lingoisland');
+    tray.on('click', () => tray.popUpContextMenu());
+    tray.on('right-click', () => tray.popUpContextMenu());
     buildTrayMenu();
+    trayLog('created', JSON.stringify({ title: tray.getTitle(), bounds: tray.getBounds(), version: app.getVersion(), activationPolicy: 'accessory' }));
+    setTimeout(() => {
+      if (!tray || tray.isDestroyed()) return;
+      const bounds = tray.getBounds();
+      trayLog('verified', JSON.stringify({ title: tray.getTitle(), bounds, visible: trayBoundsAreVisible(bounds) }));
+    }, 1200);
+  } catch (error) {
+    trayLog('failed', error?.stack || error?.message || String(error));
+    throw error;
   }
-  return { current: app.getVersion(), info, repo: REPO };
-});
-ipcMain.handle('update:open', () => {
-  if (updateInfo) shell.openExternal(updateInfo.url);
-});
+}
 
-ipcMain.handle('panel:hide', () => hidePanel());
-ipcMain.handle('panel:allow-blur', () => { keepPanelOpen = false; });
-ipcMain.handle('intro:complete', () => {
-  introductionSeen = true;
-  saveUIState();
+ipcMain.handle('config:get', () => publicConfig());
+ipcMain.handle('config:set', (_event, config) => publicConfig(saveConfig(config)));
+ipcMain.handle('window:hide', () => win?.hide());
+ipcMain.handle('window:minimize', () => win?.minimize());
+ipcMain.handle('clipboard:write', (_event, text) => {
+  selfWrote = String(text || '');
+  lastClipboard = selfWrote;
+  clipboard.writeText(selfWrote);
+  return true;
 });
-ipcMain.handle('clipboard:write', (_e, t) => {
-  selfWrote = t || '';
-  clipboard.writeText(t);
+ipcMain.handle('app:view', (_event, view) => showView(view, true));
+ipcMain.handle('external:open', (_event, url) => {
+  if (/^(https?:|mailto:)/i.test(String(url))) return shell.openExternal(String(url));
+  return false;
 });
-
-/* ---- 浮窗 IPC ---- */
-
-// 点一下钉住：移开也不收，方便你去选中/复制里面的文字。再点一下解除。
-ipcMain.on('pill:click', () => {
-  if (!pillWin || pillWin.isDestroyed()) return;
-  if (pillPinned) {
-    pillPinned = false;
-    pillSend('pill:pinned', false);
-    return;
+ipcMain.handle('check:cancel', () => currentAbort?.abort());
+ipcMain.handle('check:run', async (_event, payload) => {
+  const text = String(payload?.text || '').trim();
+  const mode = String(payload?.mode || 'default');
+  const customPrompt = String(payload?.customPrompt || '').trim();
+  const targetLanguage = ['en', 'fr', 'de', 'ja'].includes(payload?.targetLanguage) ? payload.targetLanguage : 'en';
+  const silent = payload?.silent === true;
+  const bundle = payload?.bundle === true;
+  if (!text) return { ok: false, error: '请输入要处理的内容' };
+  currentAbort?.abort();
+  const controller = new AbortController();
+  currentAbort = controller;
+  const config = loadConfig();
+  try {
+    const output = await streamCheck({
+      config,
+      text,
+      tone: mode,
+      targetLanguage,
+      variant: bundle ? 'pill-bundle' : 'main',
+      customPrompt,
+      signal: controller.signal,
+      onDelta: (chunk) => { if (!silent) win?.webContents.send('check:delta', chunk); },
+    });
+    const queryMatch = output.match(/<!--\s*NEWS_QUERY\s*:\s*([^>]+?)\s*-->/i);
+    const newsQuery = queryMatch ? queryMatch[1].trim() : text;
+    const sources = mode === 'learning' || bundle ? await searchNewsExamples(newsQuery, targetLanguage) : [];
+    if (!silent) win?.webContents.send('check:done', { sources });
+    return { ok: true, sources, output };
+  } catch (error) {
+    if (controller.signal.aborted) return { ok: false, canceled: true };
+    const message = error?.message || '请求失败';
+    if (!silent) win?.webContents.send('check:error', message);
+    return { ok: false, error: message };
+  } finally {
+    if (currentAbort === controller) currentAbort = null;
   }
-  pillPinned = true;
-  setPillExpanded(true);
-  pillSend('pill:pinned', true);
 });
-
+ipcMain.handle('favorites:list', () => loadFavorites());
+ipcMain.handle('favorites:add', (_event, item) => {
+  const rows = loadFavorites();
+  const entry = {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    createdAt: new Date().toISOString(),
+    mode: String(item?.mode || 'default'),
+    source: String(item?.source || '').slice(0, 5000),
+    output: String(item?.output || '').slice(0, 12000),
+    sources: Array.isArray(item?.sources) ? item.sources.slice(0, 6) : [],
+  };
+  saveFavorites([entry, ...rows]);
+  return entry;
+});
+ipcMain.handle('favorites:remove', (_event, id) => saveFavorites(loadFavorites().filter((item) => item.id !== id)));
+ipcMain.handle('pill:favorite', (_event, item) => {
+  const rows = loadFavorites();
+  const entry = {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    createdAt: new Date().toISOString(),
+    mode: String(item?.mode || 'default'),
+    source: String(item?.source || '').slice(0, 5000),
+    output: String(item?.output || '').slice(0, 12000),
+    sources: Array.isArray(item?.sources) ? item.sources.slice(0, 6) : [],
+  };
+  saveFavorites([entry, ...rows]);
+  if (rendererReady) win.webContents.send('favorites:changed');
+  return entry;
+});
+ipcMain.handle('favorites:export', () => exportFavorites());
+ipcMain.handle('update:check', () => checkForUpdate(app.getVersion()));
+ipcMain.handle('update:open', () => shell.openExternal(`https://github.com/${REPO}/releases/latest`));
+ipcMain.on('pill:expand', () => setPillExpanded(true));
+ipcMain.on('pill:collapse', () => setPillExpanded(false));
 ipcMain.on('pill:close', () => hidePill());
-
-ipcMain.on('pill:copy', (_e, t) => {
-  selfWrote = t || '';
-  clipboard.writeText(t);
-  lastClipboard = t || ''; // 立刻同步，免得轮询再触发一轮
+ipcMain.on('pill:mode', (_event, payload) => {
+  const current = loadConfig();
+  const mode = String(payload?.mode || 'default');
+  const customPrompt = String(payload?.customPrompt ?? current.customPrompt ?? '').slice(0, 4000);
+  if (!['default', 'formal', 'casual', 'concise', 'learning'].includes(mode)) return;
+  saveConfig({ ...current, pillMode: mode, customPrompt });
+  if (pillBundleText && pillBundleOutput) pillSend('pill:bundle-select', { mode, output: pillBundleOutput, sources: mode === 'learning' ? pillBundleSources : [] });
 });
-
-/* ---------------- lifecycle ---------------- */
+ipcMain.on('pill:copy', (_event, text) => {
+  selfWrote = String(text || '');
+  lastClipboard = selfWrote;
+  clipboard.writeText(selfWrote);
+});
 
 app.whenReady().then(() => {
-  startupLog(`ready version=${app.getVersion()} platform=${process.platform}`);
-  // 像 PhrasePeek 一样成为真正的菜单栏应用：没有 Dock 图标，也不会在切换
-  // Space/全屏时把自己拉成前台普通应用。设置和退出都从菜单栏进入。
-  if (process.platform === 'darwin') {
-    app.setActivationPolicy('accessory');
-    if (app.dock) app.dock.hide();
-  }
-  const uiState = loadUIState();
-  pillPlacement = uiState.pillPlacement;
-  introductionSeen = uiState.introductionSeen;
-  showOnLaunch = !introductionSeen;
+  app.setAsDefaultProtocolClient('lingoisland');
+  app.setActivationPolicy('regular');
+  nativeTheme.themeSource = loadConfig().appearance;
   createWindow();
-  setTimeout(() => {
-    if (showOnLaunch && win && !win.isDestroyed()) {
-      showOnLaunch = false;
-      send('panel:intro');
-      showPanel({ keepOpen: true });
-    }
-  }, 1200);
-  buildAppMenu();
-  buildTray();
+  startNativeStatusItem();
   createPill();
-  const cfg = loadConfig();
-  const r = registerHotkey(cfg.hotkey);
-  if (!r.ok) console.warn('快捷键注册失败：', r.error);
-  applyClipboardWatch(cfg);
+  applyClipboardWatch(loadConfig());
+  showView('intro', true);
+  setTimeout(async () => {
+    const info = await checkForUpdate(app.getVersion()).catch(() => null);
+    if (info?.available && rendererReady) win.webContents.send('update:available', info);
+  }, 8000);
+  updateTimer = setInterval(async () => {
+    const info = await checkForUpdate(app.getVersion()).catch(() => null);
+    if (info?.available && rendererReady) win.webContents.send('update:available', info);
+  }, CHECK_INTERVAL_MS);
 
-  // 更新检查：延后 8 秒，别和启动抢资源；失败静默，绝不影响主功能
-  const runUpdateCheck = async () => {
-    const info = await checkForUpdate(app.getVersion());
-    if (!info || !info.hasUpdate) return;
-    updateInfo = info;
-    buildTrayMenu();
-    send('update:available', info);
-  };
-  setTimeout(runUpdateCheck, 8000);
-  setInterval(runUpdateCheck, CHECK_INTERVAL_MS);
+  const e2eDir = process.env.LINGOISLAND_E2E_DIR || process.env.SAYBETTER_E2E_DIR;
+  if (e2eDir) {
+    setTimeout(async () => {
+      fs.mkdirSync(e2eDir, { recursive: true });
+      const intro = await win.webContents.capturePage();
+      fs.writeFileSync(path.join(e2eDir, 'intro.png'), intro.toPNG());
+      const initialHidden = !pillWin.isVisible();
+      clipboard.writeText(`Saybetter-A lingoisland E2E ${Date.now()}`);
+      setTimeout(async () => {
+        const collapsedImage = await pillWin.webContents.capturePage();
+        fs.writeFileSync(path.join(e2eDir, 'pill-collapsed.png'), collapsedImage.toPNG());
+        const hoverCycles = [];
+        for (let cycle = 0; cycle < 6; cycle += 1) {
+          await pillWin.webContents.executeJavaScript("document.querySelector('#island').dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }))");
+          await new Promise((resolve) => setTimeout(resolve, 100));
+          const opened = pillWin.getBounds();
+          hoverCycles.push(opened.width === PILL_EXPANDED_WIDTH && opened.height === PILL_EXPANDED_HEIGHT);
+          pillPointerInside = false;
+          schedulePillExpanded(false);
+          await new Promise((resolve) => setTimeout(resolve, PILL_COLLAPSE_DELAY_MS + 80));
+          const closed = pillWin.getBounds();
+          hoverCycles.push(closed.width === PILL_WIDTH && closed.height === PILL_HEIGHT);
+        }
+        await pillWin.webContents.executeJavaScript("document.querySelector('#island').dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }))");
+        setTimeout(async () => {
+          const expandedImage = await pillWin.webContents.capturePage();
+          fs.writeFileSync(path.join(e2eDir, 'pill-expanded.png'), expandedImage.toPNG());
+          writeJSON(path.join(e2eDir, 'report.json'), {
+            trayBounds: tray.getBounds(),
+            trayTitle: tray.getTitle(),
+            mainBounds: win.getBounds(),
+            pillBounds: pillWin.getBounds(),
+            spaceWheelAnchor,
+            initialHidden,
+            pillVisible: pillWin.isVisible(),
+            hoverExpanded: pillWin.getBounds().width === PILL_EXPANDED_WIDTH && pillWin.getBounds().height === PILL_EXPANDED_HEIGHT,
+            hoverCycles,
+            clipboardDetected: lastClipboard.startsWith('Saybetter-A lingoisland E2E '),
+          });
+          app.quit();
+        }, 350);
+      }, 1300);
+    }, 900);
+  }
 });
 
-app.on('window-all-closed', () => {}); // 菜单栏常驻，关掉面板不等于退出
-
-// 点程序坞图标（或从启动台/访达打开已在运行的 app）→ 弹出面板
-app.on('activate', () => {
-  if (win && !win.isDestroyed()) showPanel();
+app.on('open-url', (event, url) => {
+  event.preventDefault();
+  handleNativeStatusCommand(url);
 });
-app.on('before-quit', () => { isQuitting = true; });
-app.on('will-quit', () => {
-  globalShortcut.unregisterAll();
+app.on('activate', () => showView('intro', true));
+app.on('before-quit', () => {
+  app.isQuitting = true;
+  clearInterval(updateTimer);
+  clearTimeout(pillPositionSaveTimer);
+  if (nativeStatusProcess && !nativeStatusProcess.killed) nativeStatusProcess.kill();
+  nativeStatusProcess = null;
   stopClipboardWatch();
+  stopPillHoverWatch();
+  currentAbort?.abort();
+  pillAbort?.abort();
 });
-
-const gotLock = app.requestSingleInstanceLock();
-if (!gotLock) app.exit(0);
-app.on('second-instance', () => showPanel());
+app.on('window-all-closed', () => {});

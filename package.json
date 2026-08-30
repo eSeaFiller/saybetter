@@ -1,10 +1,15 @@
 {
-  "name": "saybetter",
-  "version": "0.5.0",
-  "description": "SayBetter — 菜单栏常驻的语法与表达检查小工具",
+  "name": "saybetter-a-lingoisland",
+  "version": "0.8.1",
+  "description": "Saybetter-A lingoisland — 极简 macOS 菜单栏表达与学习助手",
   "main": "main.js",
   "scripts": {
+    "prestart": "npm run build:native",
     "start": "electron .",
+    "test": "node --test scripts/app.test.js",
+    "ui:smoke": "electron scripts/ui-smoke.js",
+    "build:native": "mkdir -p native/bin && swiftc native/LingoIslandStatus.swift -o native/bin/LingoIslandStatus -framework Cocoa && codesign --force --sign - native/bin/LingoIslandStatus",
+    "predist": "npm run build:native",
     "dist": "electron-builder --mac"
   },
   "author": "",
@@ -15,8 +20,8 @@
     "electron-builder": "^25.1.8"
   },
   "build": {
-    "appId": "com.local.saybetter",
-    "productName": "SayBetter",
+    "appId": "com.lingoisland.app",
+    "productName": "Saybetter-A lingoisland",
     "files": [
       "main.js",
       "preload.js",
@@ -24,17 +29,33 @@
       "providers.js",
       "updater.js",
       "renderer/**",
+      "LICENSE",
       "traySayBetterTemplate.png",
       "traySayBetterTemplate@2x.png",
       "traySayBetterBusyTemplate.png",
-      "traySayBetterBusyTemplate@2x.png"
+      "traySayBetterBusyTemplate@2x.png",
+      "trayLTemplate.png",
+      "trayLTemplate@2x.png"
+    ],
+    "extraResources": [
+      {
+        "from": "native/bin/LingoIslandStatus",
+        "to": "native/LingoIslandStatus"
+      }
     ],
     "mac": {
-      "category": "public.app-category.productivity",
-      "icon": "Assets/AppIcon.png",
+      "category": "public.app-category.education",
+      "icon": "Assets/LingoIsland.icns",
       "minimumSystemVersion": "13.0.0",
+      "artifactName": "Saybetter-A-lingoisland-${version}-${arch}.${ext}",
       "extendInfo": {
-        "LSUIElement": true
+        "LSUIElement": false,
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLName": "com.lingoisland.app.commands",
+            "CFBundleURLSchemes": ["lingoisland"]
+          }
+        ]
       },
       "target": "dmg"
     }

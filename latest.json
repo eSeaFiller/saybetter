@@ -1,5 +1,5 @@
 {
-  "version": "0.5.0",
-  "url": "https://github.com/eSeaFiller/saybetter/releases/download/v0.5.0/SayBetter-0.5.0-arm64.dmg",
-  "notes": "菜单栏图标换成气泡+对勾（忙碌态三点），比原来的细 S 好认得多；启动日志记录图标落在哪块屏"
+  "version": "0.8.1",
+  "url": "https://github.com/eSeaFiller/saybetter/releases/download/v0.8.1/Saybetter-A-lingoisland-0.8.1-arm64.dmg",
+  "notes": "新增原生菜单栏隐私暂停开关；灵动岛默认位于刘海下方居中，支持自由拖动并记住位置；保留原生菜单栏 L 的稳定显示。"
 }

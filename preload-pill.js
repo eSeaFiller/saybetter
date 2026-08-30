@@ -3,16 +3,16 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('pill', {
-  click: () => ipcRenderer.send('pill:click'),
+  expand: () => ipcRenderer.send('pill:expand'),
+  collapse: () => ipcRenderer.send('pill:collapse'),
   close: () => ipcRenderer.send('pill:close'),
-  copy: (t) => ipcRenderer.send('pill:copy', t),
-  onDwell: (fn) => ipcRenderer.on('pill:dwell', (_e, ms) => fn(ms)),
-  onDwellCancel: (fn) => ipcRenderer.on('pill:dwell-cancel', () => fn()),
-  onStart: (fn) => ipcRenderer.on('pill:start', (_e, p) => fn(p)),
-  onDelta: (fn) => ipcRenderer.on('pill:delta', (_e, d) => fn(d)),
-  onDone: (fn) => ipcRenderer.on('pill:done', () => fn()),
-  onError: (fn) => ipcRenderer.on('pill:error', (_e, m) => fn(m)),
-  // 展开与否由主进程说了算（它轮询真实光标位置，比 DOM 的 hover 可靠）
-  onExpanded: (fn) => ipcRenderer.on('pill:expanded', (_e, v) => fn(v)),
-  onPinned: (fn) => ipcRenderer.on('pill:pinned', (_e, v) => fn(v)),
+  copy: (text) => ipcRenderer.send('pill:copy', text),
+  favorite: (item) => ipcRenderer.invoke('pill:favorite', item),
+  setMode: (mode, customPrompt = '') => ipcRenderer.send('pill:mode', { mode, customPrompt }),
+  onStart: (fn) => ipcRenderer.on('pill:start', (_event, payload) => fn(payload)),
+  onDelta: (fn) => ipcRenderer.on('pill:delta', (_event, chunk) => fn(chunk)),
+  onDone: (fn) => ipcRenderer.on('pill:done', (_event, payload) => fn(payload || {})),
+  onBundleSelect: (fn) => ipcRenderer.on('pill:bundle-select', (_event, payload) => fn(payload || {})),
+  onError: (fn) => ipcRenderer.on('pill:error', (_event, message) => fn(message)),
+  onExpanded: (fn) => ipcRenderer.on('pill:expanded', (_event, value) => fn(value)),
 });

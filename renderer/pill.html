@@ -2,58 +2,44 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self' data:;" />
-  <title>SayBetter Pill</title>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self';" />
+  <title>Saybetter-A lingoisland Island</title>
   <link rel="stylesheet" href="pill.css" />
 </head>
 <body>
-  <div id="pill" class="pill collapsed">
-    <!-- 极光：几条模糊色带在背后缓慢漂移 -->
-    <div class="aurora" aria-hidden="true">
-      <span class="band b1"></span>
-      <span class="band b2"></span>
-      <span class="band b3"></span>
-      <span class="band b4"></span>
-    </div>
-    <!-- 细噪点，防止大面积渐变出现色阶断层 -->
-    <div class="grain" aria-hidden="true"></div>
-    <!-- 玻璃面：内容都放在它上面 -->
-    <div class="glass">
-    <!-- 收起态：一颗安静的胶囊 -->
-    <div class="bar">
-      <span id="dot" class="dot"></span>
-      <span id="direction" class="direction"></span>
-      <span class="spacer"></span>
-      <span id="peek" class="peek"></span>
-      <!-- 展开后右上角的状态区：状态文字 + 关闭 -->
-      <span id="status" class="status"></span>
-      <button id="btn-close" class="hdr-btn" title="关闭">✕</button>
-    </div>
-    <div id="progress" class="progress"><div id="progress-fill" class="fill"></div></div>
-
-    <!-- 展开态 -->
-    <div id="body" class="body">
-      <!-- 语气切换固定在这里，永远不随正文滚走 -->
-      <div id="tones" class="tones"></div>
-
-      <div class="sheet">
-        <p id="waiting" class="waiting-note"></p>
-        <p id="headline" class="headline"></p>
-        <p id="source" class="source"></p>
-
-        <div id="why-wrap" class="section">
-          <div id="why-label" class="label"></div>
-          <div id="why" class="why"></div>
+  <main id="island" class="island collapsed">
+    <header class="island-bar">
+      <span class="brand-mark"><i></i></span>
+      <strong class="brand-name">Saybetter-A lingoisland</strong>
+      <span id="pill-language" class="language">→ EN</span>
+      <span id="preview" class="preview"></span>
+      <span id="dot" class="dot working"></span>
+      <button id="btn-close" class="icon-button" title="关闭">×</button>
+    </header>
+    <nav id="pill-modes" class="pill-modes" aria-label="表达模式">
+      <button class="pill-mode on" data-mode="default">默认</button>
+      <button class="pill-mode" data-mode="formal">正式</button>
+      <button class="pill-mode" data-mode="casual">口语</button>
+      <button class="pill-mode" data-mode="concise">简洁</button>
+      <button class="pill-mode" data-mode="learning">学习</button>
+    </nav>
+    <section id="pill-custom" class="pill-custom" hidden>
+      <textarea id="pill-custom-prompt" maxlength="4000" placeholder="输入你的 AI Prompt…"></textarea>
+      <button id="btn-apply-custom">应用</button>
+    </section>
+    <section class="island-body">
+      <p id="source" class="source"></p>
+      <article id="output" class="output"></article>
+      <section id="pill-sources" class="pill-sources" hidden></section>
+      <footer>
+        <span id="status">生成中…</span>
+        <div class="result-buttons">
+          <button id="btn-favorite" class="favorite-button" disabled>收藏</button>
+          <button id="btn-copy" class="copy-button">复制结果</button>
         </div>
-      </div>
-
-      <div class="foot">
-        <span id="hint" class="hint"></span>
-        <button id="btn-copy" class="action primary"></button>
-      </div>
-    </div>
-    </div>
-  </div>
+      </footer>
+    </section>
+  </main>
   <script src="pill.js"></script>
 </body>
 </html>

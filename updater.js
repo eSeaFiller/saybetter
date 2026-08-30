@@ -62,7 +62,7 @@ async function fromRedirect() {
   const version = m[1];
   return {
     version,
-    url: `https://github.com/${REPO}/releases/download/v${version}/SayBetter-${version}-arm64.dmg`,
+    url: `https://github.com/${REPO}/releases/download/v${version}/Saybetter-A-lingoisland-${version}-arm64.dmg`,
     notes: '',
   };
 }

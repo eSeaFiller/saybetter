@@ -2,3 +2,18 @@ node_modules/
 dist/
 .DS_Store
 *.log
+
+# Local verification artifacts
+.e2e*/
+.ui-smoke/
+.pill-smoke/
+.installed-*/
+.*-reference.png
+.known-working-tray.png
+
+# Generated build intermediates
+native/bin/
+Assets/LingoIsland.iconset/
+Assets/LingoIsland-1024.png
+Assets/LingoIsland-L-generated.png
+Assets/LingoIslandLogoSource.png

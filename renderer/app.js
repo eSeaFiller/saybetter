@@ -1,441 +1,449 @@
 'use strict';
 
-const $ = (s) => document.querySelector(s);
-const input = $('#input');
-const result = $('#result');
-const status = $('#status');
-const viewIntro = $('#view-intro');
-const viewMain = $('#view-main');
-const viewSettings = $('#view-settings');
+const $ = (selector) => document.querySelector(selector);
+const $$ = (selector) => [...document.querySelectorAll(selector)];
+const MODE_NAMES = { default: '默认', formal: '专业', casual: '轻松', concise: '简洁', learning: '学习', custom: '自定义' };
+const TARGET_LANGUAGE_NAMES = { en: '英语', fr: '法语', de: '德语', ja: '日语' };
+const STANDARD_MODES = new Set(['default', 'formal', 'casual', 'concise']);
+const BUNDLED_MODES = new Set(['default', 'formal', 'casual', 'concise', 'learning']);
 
-let tone = 'default';
+let config;
+let mode = 'default';
 let raw = '';
+let bundleRaw = '';
+let cleanOutput = '';
 let running = false;
-let fixedText = '';
-let lastCopied = ''; // 自己写进剪贴板的东西，别再当成新输入抓回来
-let copiedThisRun = false;
-let presets = [];
-let language = 'zh';
-let externalViewRequested = false;
+let runningBundle = false;
+let sources = [];
+let modeBaselines = new Map();
 
-const LOCALES = {
-  zh: {
-    htmlLang: 'zh-CN', settings: '设置', close: '关闭', language: '语言', provider: '服务商',
-    baseUrl: 'API 地址', baseUrlPlaceholder: '留空则用默认', model: '模型', apiKey: 'API Key',
-    apiKeyPlaceholder: '存在本机钥匙串，不会外传', hotkey: '全局快捷键', hotkeyPlaceholder: 'Alt+Space',
-    hotkeyHelp: '写法：Alt / Command / Control / Shift 加一个键，例如', save: '保存', viewIntro: '查看介绍', saved: '已保存',
-    savedHotkeyError: '已保存，但快捷键没注册上：', inputPlaceholder: '粘贴一段话，⌘↵ 检查',
-    defaultTone: '默认', formalTone: '正式', casualTone: '口语', conciseTone: '简洁',
-    emptyLine1: '把要检查的句子粘进来，按', emptyLine2: '改好的句子可以按', copySuffix: '直接复制走，', closeSuffix: '收起面板。', copy: '复制', copied: '已复制',
-    watchClipboard: '监听复制，自动弹出浮窗', watchHelp: '每次复制都会把内容送到你配置的模型，敏感内容请先关掉',
-    currentVersion: '当前版本', checkUpdate: '检查更新', checkingUpdate: '查询中…', upToDate: '已是最新', newVersion: '有新版本', download: '下载', checkFailed: '查不到（网络或仓库不可达）',
-    checking: '检查中…', error: '出错', errorTitle: '调不通', errorHelp: '检查一下设置里的服务商 / 模型名 / API Key。',
-  },
-  en: {
-    htmlLang: 'en', settings: 'Settings', close: 'Close', language: 'Language', provider: 'Provider',
-    baseUrl: 'API URL', baseUrlPlaceholder: 'Leave blank to use the default', model: 'Model', apiKey: 'API Key',
-    apiKeyPlaceholder: 'Stored in your local keychain', hotkey: 'Global shortcut', hotkeyPlaceholder: 'Alt+Space',
-    hotkeyHelp: 'Use Alt / Command / Control / Shift plus one key, for example', save: 'Save', viewIntro: 'View introduction', saved: 'Saved',
-    savedHotkeyError: 'Saved, but the shortcut could not be registered:', inputPlaceholder: 'Paste text, then press ⌘↵ to check',
-    defaultTone: 'Default', formalTone: 'Formal', casualTone: 'Casual', conciseTone: 'Concise',
-    emptyLine1: 'Paste a sentence to check, then press', emptyLine2: 'Press', copySuffix: 'to copy the corrected sentence,', closeSuffix: 'to close the panel.', copy: 'Copy', copied: 'Copied',
-    watchClipboard: 'Watch the clipboard and pop up automatically', watchHelp: 'Every copy is sent to your configured model. Turn this off for sensitive text.',
-    currentVersion: 'Version', checkUpdate: 'Check for updates', checkingUpdate: 'Checking…', upToDate: 'Up to date', newVersion: 'New version', download: 'Download', checkFailed: 'Could not check (network or repo unreachable)',
-    checking: 'Checking…', error: 'Error', errorTitle: 'Request failed', errorHelp: 'Check the provider, model name, and API Key in Settings.',
-  },
-  vi: {
-    htmlLang: 'vi', settings: 'Cài đặt', close: 'Đóng', language: 'Ngôn ngữ', provider: 'Nhà cung cấp',
-    baseUrl: 'Địa chỉ API', baseUrlPlaceholder: 'Để trống để dùng mặc định', model: 'Mô hình', apiKey: 'API Key',
-    apiKeyPlaceholder: 'Được lưu trong chuỗi khóa trên máy', hotkey: 'Phím tắt toàn cục', hotkeyPlaceholder: 'Alt+Space',
-    hotkeyHelp: 'Dùng Alt / Command / Control / Shift cùng một phím, ví dụ', save: 'Lưu', viewIntro: 'Xem lại giới thiệu', saved: 'Đã lưu',
-    savedHotkeyError: 'Đã lưu nhưng không đăng ký được phím tắt:', inputPlaceholder: 'Dán câu cần kiểm tra, rồi nhấn ⌘↵',
-    defaultTone: 'Mặc định', formalTone: 'Trang trọng', casualTone: 'Thân mật', conciseTone: 'Ngắn gọn',
-    emptyLine1: 'Dán câu cần kiểm tra rồi nhấn', emptyLine2: 'Nhấn', copySuffix: 'để sao chép câu đã sửa,', closeSuffix: 'để đóng bảng điều khiển.', copy: 'Sao chép', copied: 'Đã sao chép',
-    watchClipboard: 'Theo dõi clipboard và tự động hiện', watchHelp: 'Mỗi lần sao chép đều được gửi tới mô hình bạn đã cấu hình. Hãy tắt khi xử lý nội dung nhạy cảm.',
-    currentVersion: 'Phiên bản', checkUpdate: 'Kiểm tra cập nhật', checkingUpdate: 'Đang kiểm tra…', upToDate: 'Đã mới nhất', newVersion: 'Có bản mới', download: 'Tải về', checkFailed: 'Không kiểm tra được',
-    checking: 'Đang kiểm tra…', error: 'Lỗi', errorTitle: 'Yêu cầu thất bại', errorHelp: 'Kiểm tra nhà cung cấp, tên mô hình và API Key trong Cài đặt.',
-  },
-  id: {
-    htmlLang: 'id', settings: 'Pengaturan', close: 'Tutup', language: 'Bahasa', provider: 'Penyedia',
-    baseUrl: 'URL API', baseUrlPlaceholder: 'Kosongkan untuk menggunakan default', model: 'Model', apiKey: 'API Key',
-    apiKeyPlaceholder: 'Disimpan di keychain lokal', hotkey: 'Pintasan global', hotkeyPlaceholder: 'Alt+Space',
-    hotkeyHelp: 'Gunakan Alt / Command / Control / Shift dan satu tombol, misalnya', save: 'Simpan', viewIntro: 'Lihat pengenalan', saved: 'Tersimpan',
-    savedHotkeyError: 'Tersimpan, tetapi pintasan tidak dapat didaftarkan:', inputPlaceholder: 'Tempel teks, lalu tekan ⌘↵ untuk memeriksa',
-    defaultTone: 'Default', formalTone: 'Formal', casualTone: 'Santai', conciseTone: 'Ringkas',
-    emptyLine1: 'Tempel kalimat yang ingin diperiksa, lalu tekan', emptyLine2: 'Tekan', copySuffix: 'untuk menyalin kalimat yang telah diperbaiki,', closeSuffix: 'untuk menutup panel.', copy: 'Salin', copied: 'Tersalin',
-    watchClipboard: 'Pantau papan klip dan tampil otomatis', watchHelp: 'Setiap salinan dikirim ke model yang Anda konfigurasikan. Matikan untuk teks sensitif.',
-    currentVersion: 'Versi', checkUpdate: 'Periksa pembaruan', checkingUpdate: 'Memeriksa…', upToDate: 'Sudah terbaru', newVersion: 'Versi baru', download: 'Unduh', checkFailed: 'Tidak dapat memeriksa',
-    checking: 'Memeriksa…', error: 'Error', errorTitle: 'Permintaan gagal', errorHelp: 'Periksa penyedia, nama model, dan API Key di Pengaturan.',
-  },
-  th: {
-    htmlLang: 'th', settings: 'การตั้งค่า', close: 'ปิด', language: 'ภาษา', provider: 'ผู้ให้บริการ',
-    baseUrl: 'ที่อยู่ API', baseUrlPlaceholder: 'เว้นว่างเพื่อใช้ค่าเริ่มต้น', model: 'โมเดล', apiKey: 'API Key',
-    apiKeyPlaceholder: 'จัดเก็บไว้ในพวงกุญแจของเครื่อง', hotkey: 'ปุ่มลัดส่วนกลาง', hotkeyPlaceholder: 'Alt+Space',
-    hotkeyHelp: 'ใช้ Alt / Command / Control / Shift ร่วมกับปุ่มหนึ่งปุ่ม เช่น', save: 'บันทึก', viewIntro: 'ดูคำแนะนำอีกครั้ง', saved: 'บันทึกแล้ว',
-    savedHotkeyError: 'บันทึกแล้ว แต่ไม่สามารถลงทะเบียนปุ่มลัดได้:', inputPlaceholder: 'วางข้อความแล้วกด ⌘↵ เพื่อตรวจสอบ',
-    defaultTone: 'ค่าเริ่มต้น', formalTone: 'เป็นทางการ', casualTone: 'ภาษาพูด', conciseTone: 'กระชับ',
-    emptyLine1: 'วางประโยคที่ต้องการตรวจสอบแล้วกด', emptyLine2: 'กด', copySuffix: 'เพื่อคัดลอกประโยคที่แก้ไขแล้ว', closeSuffix: 'เพื่อปิดแผง', copy: 'คัดลอก', copied: 'คัดลอกแล้ว',
-    watchClipboard: 'เฝ้าดูคลิปบอร์ดและแสดงอัตโนมัติ', watchHelp: 'ทุกครั้งที่คัดลอกจะถูกส่งไปยังโมเดลที่คุณตั้งค่าไว้ ปิดไว้หากเป็นข้อมูลอ่อนไหว',
-    currentVersion: 'เวอร์ชัน', checkUpdate: 'ตรวจสอบอัปเดต', checkingUpdate: 'กำลังตรวจสอบ…', upToDate: 'เป็นเวอร์ชันล่าสุดแล้ว', newVersion: 'มีเวอร์ชันใหม่', download: 'ดาวน์โหลด', checkFailed: 'ตรวจสอบไม่ได้',
-    checking: 'กำลังตรวจสอบ…', error: 'เกิดข้อผิดพลาด', errorTitle: 'คำขอล้มเหลว', errorHelp: 'ตรวจสอบผู้ให้บริการ ชื่อโมเดล และ API Key ในการตั้งค่า',
-  },
-  ms: {
-    htmlLang: 'ms', settings: 'Tetapan', close: 'Tutup', language: 'Bahasa', provider: 'Penyedia',
-    baseUrl: 'URL API', baseUrlPlaceholder: 'Biarkan kosong untuk guna lalai', model: 'Model', apiKey: 'API Key',
-    apiKeyPlaceholder: 'Disimpan dalam rantai kunci tempatan', hotkey: 'Pintasan global', hotkeyPlaceholder: 'Alt+Space',
-    hotkeyHelp: 'Gunakan Alt / Command / Control / Shift bersama satu kekunci, contohnya', save: 'Simpan', viewIntro: 'Lihat pengenalan', saved: 'Disimpan',
-    savedHotkeyError: 'Disimpan, tetapi pintasan tidak dapat didaftarkan:', inputPlaceholder: 'Tampal teks, kemudian tekan ⌘↵ untuk menyemak',
-    defaultTone: 'Lalai', formalTone: 'Formal', casualTone: 'Santai', conciseTone: 'Ringkas',
-    emptyLine1: 'Tampal ayat untuk disemak, kemudian tekan', emptyLine2: 'Tekan', copySuffix: 'untuk menyalin ayat yang telah dibetulkan,', closeSuffix: 'untuk menutup panel.', copy: 'Salin', copied: 'Disalin',
-    watchClipboard: 'Pantau papan klip dan muncul automatik', watchHelp: 'Setiap salinan dihantar ke model yang anda tetapkan. Matikan untuk teks sensitif.',
-    currentVersion: 'Versi', checkUpdate: 'Semak kemas kini', checkingUpdate: 'Menyemak…', upToDate: 'Sudah terkini', newVersion: 'Versi baharu', download: 'Muat turun', checkFailed: 'Tidak dapat menyemak',
-    checking: 'Sedang menyemak…', error: 'Ralat', errorTitle: 'Permintaan gagal', errorHelp: 'Semak penyedia, nama model dan API Key dalam Tetapan.',
-  },
-};
-
-function t(key) {
-  return (LOCALES[language] || LOCALES.zh)[key] || LOCALES.zh[key] || key;
+function escapeHTML(value) {
+  return String(value || '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 }
 
-function renderEmpty() {
-  if (raw || running) return;
-  $('#empty-line-1').innerHTML = `${t('emptyLine1')} <kbd>⌘</kbd><kbd>↵</kbd>.`;
-  $('#empty-line-2').innerHTML = `${t('emptyLine2')} <kbd>⌘</kbd><kbd>C</kbd> ${t('copySuffix')} <kbd>esc</kbd> ${t('closeSuffix')}`;
-}
-
-function applyLanguage(next) {
-  language = LOCALES[next] ? next : 'zh';
-  const locale = LOCALES[language];
-  document.documentElement.lang = locale.htmlLang;
-  document.querySelectorAll('[data-i18n]').forEach((el) => { el.textContent = t(el.dataset.i18n); });
-  document.querySelectorAll('[data-i18n-placeholder]').forEach((el) => { el.placeholder = t(el.dataset.i18nPlaceholder); });
-  document.querySelectorAll('[data-i18n-title]').forEach((el) => { el.title = t(el.dataset.i18nTitle); });
-  $('#hotkey-help').innerHTML = `${t('hotkeyHelp')} <code>Command+Shift+K</code>`;
-  renderEmpty();
-}
-
-/* ---------------- 极简 markdown ---------------- */
-
-function esc(s) {
-  return s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
-}
-
-function inline(s) {
-  return esc(s)
+function inlineMarkdown(value) {
+  return escapeHTML(value)
+    .replace(/\[SUBJECT\]([\s\S]+?)\[\/SUBJECT\]/g, '<span class="grammar-subject">$1</span>')
+    .replace(/\[PREDICATE\]([\s\S]+?)\[\/PREDICATE\]/g, '<span class="grammar-predicate">$1</span>')
+    .replace(/\[OBJECT\]([\s\S]+?)\[\/OBJECT\]/g, '<span class="grammar-object">$1</span>')
     .replace(/~~(.+?)~~/g, '<del>$1</del>')
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/`([^`]+)`/g, '<code>$1</code>');
+    .replace(/`(.+?)`/g, '<code>$1</code>');
 }
 
-// 把模型输出切成 [{heading, lines[]}]
-function parseSections(md) {
-  const sections = [];
-  let cur = null;
-  for (const line of md.split('\n')) {
-    const h = line.match(/^#{1,4}\s+(.*)$/);
-    if (h) {
-      cur = { heading: h[1].trim(), lines: [] };
-      sections.push(cur);
-    } else if (cur) {
-      cur.lines.push(line);
-    } else if (line.trim()) {
-      cur = { heading: '', lines: [line] };
-      sections.push(cur);
+function tokenKey(value) {
+  return String(value || '').toLocaleLowerCase().replace(/[\p{P}\p{S}\s]+/gu, '');
+}
+
+function tokenize(value) {
+  return String(value || '').match(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]|[\p{L}\p{N}]+(?:['’\-][\p{L}\p{N}]+)*|[^\p{L}\p{N}\s]+|\s+/gu) || [];
+}
+
+function lexicalKeys(value) {
+  return tokenize(value).map(tokenKey).filter(Boolean);
+}
+
+function lcs(left, right) {
+  const rows = Array.from({ length: left.length + 1 }, () => new Uint16Array(right.length + 1));
+  for (let i = left.length - 1; i >= 0; i -= 1) {
+    for (let j = right.length - 1; j >= 0; j -= 1) {
+      rows[i][j] = left[i] === right[j] ? rows[i + 1][j + 1] + 1 : Math.max(rows[i + 1][j], rows[i][j + 1]);
     }
   }
-  return sections;
+  const result = [];
+  let i = 0;
+  let j = 0;
+  while (i < left.length && j < right.length) {
+    if (left[i] === right[j]) { result.push(left[i]); i += 1; j += 1; }
+    else if (rows[i + 1][j] >= rows[i][j + 1]) i += 1;
+    else j += 1;
+  }
+  return result;
 }
 
-function renderBody(lines) {
-  let html = '';
-  let inList = false;
+function sharedTokenSequence(values) {
+  return values.map(lexicalKeys).reduce((common, value) => lcs(common, value));
+}
+
+function highlightAgainstSharedSequence(value, shared) {
+  let sharedIndex = 0;
+  return tokenize(value).map((token) => {
+    const key = tokenKey(token);
+    const html = inlineMarkdown(token);
+    if (!key) return html;
+    if (key === shared[sharedIndex]) { sharedIndex += 1; return html; }
+    return `<span class="mode-diff">${html}</span>`;
+  }).join('');
+}
+
+function highlightDifferences(value, baseline) {
+  const reference = new Set(tokenize(baseline).map(tokenKey).filter(Boolean));
+  if (!reference.size) return inlineMarkdown(value);
+  return tokenize(value).map((token) => {
+    const key = tokenKey(token);
+    const html = inlineMarkdown(token);
+    return key && !reference.has(key) ? `<span class="mode-diff">${html}</span>` : html;
+  }).join('');
+}
+
+function sectionForMode(markdown, selectedMode) {
+  const clean = String(markdown || '').replace(/<!--\s*NEWS_QUERY[\s\S]*?-->/gi, '');
+  const marker = /^\s{0,3}#{1,4}\s+(?:MODE\s*[:：-]\s*)?(default|formal|casual|concise|learning)\s*$/gim;
+  const sections = [...clean.matchAll(marker)];
+  const index = sections.findIndex((entry) => entry[1].toLowerCase() === selectedMode);
+  if (index < 0) return sections.length ? '' : clean.trim();
+  const start = sections[index].index + sections[index][0].length;
+  const end = sections[index + 1]?.index ?? clean.length;
+  return clean.slice(start, end).trim();
+}
+
+function standardPrimaries(markdown) {
+  return [...STANDARD_MODES].map((itemMode) => extractPrimary(sectionForMode(markdown, itemMode), itemMode)).filter(Boolean);
+}
+
+function commonTokenKeys(values) {
+  return new Set(sharedTokenSequence(values));
+}
+
+function highlightModeDifferences(value, values) {
+  return highlightAgainstSharedSequence(value, sharedTokenSequence(values));
+}
+
+function renderMarkdown(markdown) {
+  const sanitized = String(markdown || '').replace(/<!--\s*NEWS_QUERY[\s\S]*?-->/gi, '').trim();
+  const primary = extractPrimary(sanitized, mode);
+  const bundleValues = bundleRaw && STANDARD_MODES.has(mode) ? standardPrimaries(bundleRaw) : [];
+  const baseline = STANDARD_MODES.has(mode) && mode !== 'default' ? modeBaselines.get('default') : '';
+  const lines = sanitized.split(/\r?\n/);
+  const html = [];
+  let listOpen = false;
   for (const line of lines) {
-    const li = line.match(/^\s*[-*]\s+(.*)$/);
-    if (li) {
-      if (!inList) { html += '<ul>'; inList = true; }
-      html += `<li>${inline(li[1])}</li>`;
-    } else {
-      if (inList) { html += '</ul>'; inList = false; }
-      if (line.trim()) html += `<p>${inline(line)}</p>`;
+    const heading = line.match(/^#{1,6}\s+(.+)$/);
+    const bullet = line.match(/^\s*[-*•]\s+(.+)$/);
+    const grammarLine = line.match(/^\s*\[(?:SUBJECT|PREDICATE|OBJECT)\]/);
+    if (heading) {
+      if (listOpen) { html.push('</ul>'); listOpen = false; }
+      html.push(`<h3>${inlineMarkdown(heading[1])}</h3>`);
+    } else if (grammarLine) {
+      if (listOpen) { html.push('</ul>'); listOpen = false; }
+      html.push(`<p class="grammar-sentence">${inlineMarkdown(line.trim())}</p>`);
+    } else if (bullet) {
+      if (!listOpen) { html.push('<ul>'); listOpen = true; }
+      html.push(`<li>${inlineMarkdown(bullet[1])}</li>`);
+    } else if (line.trim()) {
+      if (listOpen) { html.push('</ul>'); listOpen = false; }
+      const content = line.trim() === primary && bundleValues.length === 4
+        ? highlightModeDifferences(line.trim(), bundleValues)
+        : line.trim() === primary && baseline
+          ? highlightDifferences(line.trim(), baseline)
+          : inlineMarkdown(line.trim());
+      html.push(`<p>${content}</p>`);
     }
   }
-  if (inList) html += '</ul>';
-  return html;
+  if (listOpen) html.push('</ul>');
+  return html.join('');
 }
 
-function render(md, streaming) {
-  const sections = parseSections(md);
-  fixedText = '';
-  let html = '';
+function extractPrimary(markdown, selectedMode = mode) {
+  const clean = String(markdown || '').replace(/<!--\s*NEWS_QUERY[\s\S]*?-->/gi, '').trim();
+  const targetHeading = selectedMode === 'learning' ? '自然表达' : selectedMode === 'custom' ? '' : '优化表达';
+  const sections = [...clean.matchAll(/^#{1,6}\s+(.+)\n([\s\S]*?)(?=^#{1,6}\s+|$)/gm)];
+  const target = targetHeading ? sections.find((match) => match[1].trim().includes(targetHeading)) : sections[0];
+  if (target) return target[2].replace(/^[-*•]\s+/gm, '').trim();
+  const fallback = sections[0]?.[2] || clean;
+  return fallback.replace(/^[-*•]\s+/gm, '').trim();
+}
 
-  sections.forEach((sec, i) => {
-    const body = sec.lines.join('\n').trim();
-    // 第一段固定是“修改后”，标题会随输出语言变化。
-    const isFixed = i === 0;
-    if (sec.heading) html += `<h3>${esc(sec.heading)}</h3>`;
-    if (isFixed) {
-      fixedText = body;
-      html += `<div class="fixed">${inline(body).replace(/\n/g, '<br>')}` +
-              `<button class="copy" id="btn-copy">${t('copy')}</button></div>`;
-    } else {
-      html += renderBody(sec.lines);
-    }
-  });
+function setView(name) {
+  $$('.view').forEach((view) => { view.hidden = view.id !== `view-${name}`; });
+  if (name === 'settings') fillSettings();
+  if (name === 'favorites') renderFavorites();
+  if (name === 'about' && config) $('#version-line').textContent = `Version ${config.version}`;
+  if (name === 'translate') setTimeout(() => $('#input').focus(), 40);
+}
 
-  // 第二个小标题一出现，就说明第一节（译文/修改后）已经写完了。
-  // 这时立刻复制，不用干等后面的说明和备选方案 —— 那部分占了输出的八成。
-  if (!copiedThisRun && fixedText && sections.length >= 2) {
-    copiedThisRun = true;
-    copyFixed();
+function setMode(next) {
+  mode = next;
+  if (bundleRaw && BUNDLED_MODES.has(next)) {
+    raw = sectionForMode(bundleRaw, next);
+    renderResult();
+    renderSources();
+    $('#result-actions').hidden = !cleanOutput;
   }
-
-  if (streaming) html += '<span class="cursor"></span>';
-  // 换 innerHTML 会把滚动位置打回顶部，所以先存后还原。
-  // 不要自动滚到底 —— 否则边流边往下跑，你根本看不住开头的译文/修改后和问题。
-  const keepScroll = result.scrollTop;
-  result.innerHTML = html || '<span class="cursor"></span>';
-  result.scrollTop = keepScroll;
-
-  const copyBtn = $('#btn-copy');
-  if (copyBtn) copyBtn.onclick = () => copyFixed();
+  $$('.mode').forEach((button) => button.classList.toggle('on', button.dataset.mode === next));
+  $('#custom-prompt-panel').hidden = next !== 'custom';
+  const target = TARGET_LANGUAGE_NAMES[$('#target-language')?.value || config?.targetLanguage || 'en'] || '英语';
+  $('#empty-detail').textContent = next === 'learning'
+    ? `学习模式会拆解主谓宾，并检索可核验的${target}新闻标题原文。`
+    : next === 'custom'
+      ? `自定义模式会严格按你填写的 Prompt 处理，并默认输出${target}。`
+      : STANDARD_MODES.has(next) && next !== 'default'
+        ? `输出${target}；完成默认模式后，会用橙色标出相对默认表达变化的词汇。`
+        : `自动检测源语言并输出${target}。`;
 }
 
-function copyFixed() {
-  if (!fixedText) return;
-  lastCopied = fixedText;
-  window.api.copy(fixedText);
-  status.textContent = t('copied');
-  status.classList.remove('err');
-  const copiedText = t('copied');
-  setTimeout(() => { if (status.textContent === copiedText) status.textContent = ''; }, 1500);
+function setRunning(value) {
+  running = value;
+  $('#btn-run').disabled = value;
+  $('#empty-state').hidden = value || Boolean(raw);
+  $('#loading-state').hidden = !value;
+  $('#result-content').hidden = !raw;
+  $('#result-actions').hidden = value || !raw;
 }
 
-/* ---------------- 跑检查 ---------------- */
-
-async function run() {
-  const text = input.value.trim();
-  if (!text || running) return;
-  running = true;
-  raw = '';
-  fixedText = '';
-  copiedThisRun = false;
-  status.classList.remove('err');
-  status.textContent = t('checking');
-  result.innerHTML = '<span class="cursor"></span>';
-  result.scrollTop = 0; // 新的一轮从头看起
-
-  const r = await window.api.run(text, tone);
-  running = false;
-  // 只清掉"检查中…"。这时 onDone 可能已经把状态换成"已复制"了，别把它抹掉。
-  if (r && (r.ok || r.aborted) && status.textContent === t('checking')) status.textContent = '';
+function renderResult() {
+  cleanOutput = String(raw || '').replace(/<!--\s*NEWS_QUERY[\s\S]*?-->/gi, '').trim();
+  if (STANDARD_MODES.has(mode) && mode !== 'default') {
+    const key = `${$('#target-language').value}\n${$('#input').value.trim()}`;
+    const baseline = modeBaselines.get(key);
+    if (baseline) modeBaselines.set('default', baseline);
+  }
+  $('#result-content').innerHTML = renderMarkdown(raw);
+  $('#result-content').hidden = !cleanOutput;
+  $('#empty-state').hidden = Boolean(cleanOutput) || running;
 }
 
-window.api.onDelta((d) => {
-  raw += d;
-  render(raw, true);
-});
-
-window.api.onDone(() => {
-  running = false;
-  // 同样只清"检查中…"：复制在流式中途就发生了，别把"已复制"抹掉。
-  if (status.textContent === t('checking')) status.textContent = '';
-  render(raw, false);
-  // 正常情况下第一节写完时已经复制过了；这里兜住只输出一节的情况。
-  if (!copiedThisRun) { copiedThisRun = true; copyFixed(); }
-});
-
-window.api.onError((msg) => {
-  running = false;
-  status.textContent = t('error');
-  status.classList.add('err');
-  result.innerHTML = `<h3>${t('errorTitle')}</h3><p>${esc(msg)}</p>` +
-    `<p class="dim">${t('errorHelp')}</p>`;
-});
-
-/* ---------------- 交互 ---------------- */
-
-function autosize() {
-  input.style.height = 'auto';
-  input.style.height = Math.min(input.scrollHeight, 140) + 'px';
-}
-input.addEventListener('input', autosize);
-
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') {
-    if (!viewSettings.hidden) { showMain(); return; }
-    window.api.hide();
+function renderSources() {
+  const section = $('#source-section');
+  const list = $('#source-list');
+  if (mode !== 'learning') { section.hidden = true; return; }
+  section.hidden = false;
+  if (!sources.length) {
+    list.innerHTML = '<p class="source-empty">暂未找到足够匹配、可核验的公开新闻标题。自然表达仍可使用，但不会伪造出处。</p>';
     return;
   }
-  if (e.metaKey && e.key === 'Enter') { e.preventDefault(); run(); return; }
-  // 没选中任何文字时，⌘C 直接拿走改好的句子
-  if (e.metaKey && e.key === 'c' && fixedText && !String(window.getSelection())) {
-    e.preventDefault();
-    copyFixed();
+  list.innerHTML = sources.map((item, index) => `
+    <button class="source-card" data-source="${index}">
+      <strong>${escapeHTML(item.title)}</strong>
+      <small>${escapeHTML(item.source || '公开新闻来源')}${item.publishedAt ? ` · ${escapeHTML(new Date(item.publishedAt).toLocaleDateString())}` : ''}</small>
+    </button>`).join('');
+}
+
+async function run() {
+  const text = $('#input').value.trim();
+  if (!text || running) return;
+  const customPrompt = $('#custom-prompt').value.trim();
+  const targetLanguage = $('#target-language').value;
+  if (mode === 'custom' && !customPrompt) {
+    $('#custom-prompt').focus();
+    $('#status').textContent = '请先填写自定义 Prompt';
+    return;
   }
-});
-
-document.querySelectorAll('.tone').forEach((b) => {
-  b.onclick = () => {
-    document.querySelectorAll('.tone').forEach((x) => x.classList.remove('on'));
-    b.classList.add('on');
-    tone = b.dataset.tone;
-    if (raw) run(); // 换语气就用同一句重跑
-  };
-});
-
-window.api.onShown(({ clipboard }) => {
-  if (!viewIntro.hidden || !viewSettings.hidden) return;
-  input.focus();
-  input.select();
-  // 剪贴板里有新东西就直接填进来，省一次 ⌘V。
-  // 但跳过上一轮我们自己复制进去的结果，否则会拿自己的输出再翻一遍。
-  const pasted = (clipboard || '').trim();
-  if (pasted && pasted !== input.value.trim() && pasted !== lastCopied.trim()) {
-    input.value = pasted;
-    autosize();
-    input.select();
-  }
-});
-
-/* ---------------- 设置 ---------------- */
-
-function showMain() {
-  window.api.allowBlur();
-  viewIntro.hidden = true;
-  viewSettings.hidden = true;
-  viewMain.hidden = false;
-  input.focus();
-}
-function showIntro() {
-  externalViewRequested = true;
-  viewMain.hidden = true;
-  viewSettings.hidden = true;
-  viewIntro.hidden = false;
-  input.blur();
-  $('#btn-intro-start').focus();
-}
-function showSettings() {
-  externalViewRequested = true;
-  viewIntro.hidden = true;
-  viewMain.hidden = true;
-  viewSettings.hidden = false;
-  $('#f-provider').focus();
-}
-function showApiKeySettings() {
-  showSettings();
-  const field = $('#field-api-key');
-  field.classList.remove('api-key-focus');
-  requestAnimationFrame(() => field.classList.add('api-key-focus'));
-  $('#f-key').focus();
-}
-
-$('#btn-settings').onclick = showSettings;
-$('#btn-back').onclick = showMain;
-$('#btn-intro-later').onclick = async () => { await window.api.completeIntro(); showMain(); };
-$('#btn-intro-start').onclick = async () => { await window.api.completeIntro(); showApiKeySettings(); };
-$('#btn-replay-intro').onclick = showIntro;
-window.api.onSettings(showSettings);
-window.api.onApiKey(showApiKeySettings);
-window.api.onIntro(showIntro);
-// 从菜单栏切换了「暂停复制翻译」时，设置页里的勾选状态要跟着变
-window.api.onConfigChanged((c) => {
-  if (c && typeof c.watchClipboard === 'boolean') {
-    const box = $('#f-watch');
-    if (box) box.checked = c.watchClipboard;
-  }
-});
-
-function applyPreset(id, { fillModel } = {}) {
-  const p = presets.find((x) => x.id === id);
-  if (!p) return;
-  $('#hint-provider').textContent = p.keyHint || '';
-  $('#f-baseurl').placeholder = p.baseUrl || '必填';
-  $('#model-list').innerHTML = p.models.map((m) => `<option value="${m}">`).join('');
-  if (fillModel) {
-    $('#f-baseurl').value = '';
-    $('#f-model').value = p.models[0] || '';
+  bundleRaw = '';
+  raw = '';
+  cleanOutput = '';
+  sources = [];
+  runningBundle = BUNDLED_MODES.has(mode);
+  $('#status').textContent = '';
+  $('#source-section').hidden = true;
+  setRunning(true);
+  $('#loading-text').textContent = mode === 'learning' ? '正在生成五种表达并拆解句式…' : '正在生成五种表达…';
+  const result = await window.api.run(text, mode, customPrompt, targetLanguage, false, runningBundle);
+  if (!result?.ok && !result?.canceled) {
+    $('#status').textContent = result?.error || '请求失败';
+    setRunning(false);
   }
 }
 
-$('#f-provider').onchange = (e) => applyPreset(e.target.value, { fillModel: true });
-$('#f-language').onchange = (e) => applyLanguage(e.target.value);
+function providerChanged() {
+  const preset = (config?.presets || []).find((item) => item.id === $('#f-provider').value);
+  if (!preset) return;
+  $('#f-baseurl').placeholder = preset.baseUrl || 'https://api.example.com/v1';
+  if (!$('#f-baseurl').value || $('#f-baseurl').dataset.autofill === '1') {
+    $('#f-baseurl').value = preset.baseUrl || '';
+    $('#f-baseurl').dataset.autofill = '1';
+  }
+  const modelList = $('#model-list');
+  modelList.innerHTML = (preset.models || []).map((model) => `<option value="${escapeHTML(model)}"></option>`).join('');
+  if ((!$('#f-model').value || $('#f-model').dataset.autofill === '1') && preset.models?.[0]) {
+    $('#f-model').value = preset.models[0];
+    $('#f-model').dataset.autofill = '1';
+  }
+  $('#provider-hint').textContent = preset.keyHint || '';
+}
 
-$('#btn-save').onclick = async () => {
-  const cfg = {
+function fillSettings() {
+  if (!config) return;
+  $('#f-provider').innerHTML = config.presets.map((item) => `<option value="${escapeHTML(item.id)}">${escapeHTML(item.label)}</option>`).join('');
+  $('#f-provider').value = config.providerId;
+  $('#f-baseurl').value = config.baseUrl || (config.presets.find((item) => item.id === config.providerId)?.baseUrl || '');
+  $('#f-model').value = config.model || '';
+  $('#f-key').value = config.apiKey || '';
+  $('#f-language').value = config.language || 'zh';
+  $('#f-appearance').value = config.appearance || 'system';
+  $('#custom-prompt').value = config.customPrompt || '';
+  $('#f-baseurl').dataset.autofill = '0';
+  $('#f-model').dataset.autofill = '0';
+  providerChanged();
+}
+
+async function saveSettings() {
+  config = await window.api.setConfig({
     providerId: $('#f-provider').value,
     baseUrl: $('#f-baseurl').value.trim(),
     model: $('#f-model').value.trim(),
-    apiKey: $('#f-key').value,
-    hotkey: $('#f-hotkey').value.trim(),
-    language,
-    watchClipboard: $('#f-watch').checked,
-  };
-  const r = await window.api.setConfig(cfg);
-  const msg = $('#save-msg');
-  if (r && r.ok) {
-    msg.textContent = t('saved');
-    setTimeout(showMain, 500);
-  } else {
-    msg.textContent = t('savedHotkeyError') + (r && r.error ? r.error : '');
-  }
-};
-
-/* ---------------- 更新检查 ---------------- */
-
-let updateUrlReady = false;
-
-function paintUpdate({ current, info }) {
-  const line = $('#update-line');
-  const btn = $('#btn-check-update');
-  btn.textContent = t('checkUpdate');
-  if (!info) {
-    line.textContent = `${t('currentVersion')} ${current}`;
-    return;
-  }
-  if (info.hasUpdate) {
-    updateUrlReady = true;
-    line.innerHTML = `<span class="has-update">${t('newVersion')} ${esc(info.version)}</span> · ${t('currentVersion')} ${esc(current)}`;
-    btn.textContent = t('download');
-  } else {
-    line.textContent = `${t('currentVersion')} ${current} · ${t('upToDate')}`;
-  }
+    apiKey: $('#f-key').value.trim(),
+    language: $('#f-language').value,
+    appearance: $('#f-appearance').value,
+    pillMode: config.pillMode || 'default',
+    targetLanguage: $('#target-language').value,
+    customPrompt: $('#custom-prompt').value.trim(),
+  });
+  $('#provider-hint').textContent = '已保存';
+  setTimeout(() => setView('translate'), 350);
 }
 
-$('#btn-check-update').onclick = async () => {
-  if (updateUrlReady) { window.api.openUpdate(); return; }
-  $('#btn-check-update').textContent = t('checkingUpdate');
-  const r = await window.api.checkUpdate();
-  if (!r || !r.info) {
-    $('#update-line').textContent = t('checkFailed');
-    $('#btn-check-update').textContent = t('checkUpdate');
+async function renderFavorites() {
+  const rows = await window.api.listFavorites();
+  const list = $('#favorites-list');
+  if (!rows.length) {
+    list.innerHTML = '<div class="no-favorites">还没有收藏。生成结果后点“收藏”即可加入。</div>';
     return;
   }
-  paintUpdate(r);
-};
+  list.innerHTML = rows.map((item) => `
+    <article class="favorite-card">
+      <div class="favorite-meta"><span>${escapeHTML(MODE_NAMES[item.mode] || item.mode)}</span><time>${escapeHTML(new Date(item.createdAt).toLocaleString())}</time></div>
+      <p class="favorite-output">${escapeHTML(item.output)}</p>
+      <p class="favorite-source">原文：${escapeHTML(item.source)}</p>
+      <div class="favorite-actions"><button class="delete-button" data-delete="${escapeHTML(item.id)}">删除</button></div>
+    </article>`).join('');
+}
 
-// 主进程后台查到新版本，直接把设置页那行点亮
-window.api.onUpdate((info) => {
-  updateUrlReady = true;
-  const line = $('#update-line');
-  if (line) line.innerHTML = `<span class="has-update">${t('newVersion')} ${esc(info.version)}</span>`;
-  const btn = $('#btn-check-update');
-  if (btn) btn.textContent = t('download');
+async function addFavorite() {
+  const output = extractPrimary(raw);
+  if (!output) return;
+  await window.api.addFavorite({ mode, source: $('#input').value.trim(), output, sources });
+  $('#status').textContent = '已收藏到本机';
+  $('#btn-favorite').textContent = '已收藏';
+  setTimeout(() => { $('#btn-favorite').textContent = '收藏'; }, 1100);
+}
+
+function setMenuOpen(value) {
+  $('#app-menu').hidden = !value;
+  $('#btn-settings').classList.toggle('open', value);
+}
+
+function appearanceLabel(value) {
+  return ({ system: '跟随系统', light: '浅色', dark: '深色' })[value] || '跟随系统';
+}
+
+async function cycleAppearance() {
+  const next = ({ system: 'light', light: 'dark', dark: 'system' })[config.appearance || 'system'];
+  config = await window.api.setConfig({ ...config, appearance: next, targetLanguage: $('#target-language').value });
+  $('#menu-appearance-label').textContent = appearanceLabel(config.appearance);
+  setMenuOpen(false);
+}
+
+function wireEvents() {
+  $('#btn-settings').addEventListener('click', (event) => { event.stopPropagation(); setMenuOpen($('#app-menu').hidden); });
+  $('#app-menu').addEventListener('click', (event) => event.stopPropagation());
+  $('#menu-target-language').addEventListener('change', async () => {
+    const target = $('#menu-target-language').value;
+    $('#target-language').value = target;
+    modeBaselines.clear();
+    setMode(mode);
+    if (config) config = await window.api.setConfig({ ...config, targetLanguage: target });
+  });
+  document.addEventListener('click', () => setMenuOpen(false));
+  $$('[data-menu-view]').forEach((button) => button.addEventListener('click', () => { setMenuOpen(false); setView(button.dataset.menuView); }));
+  $('[data-menu-appearance]').addEventListener('click', cycleAppearance);
+  $('#menu-feedback').addEventListener('click', () => { setMenuOpen(false); window.api.openExternal('mailto:xujianghao02@gmail.com?subject=Saybetter-A lingoisland%20Feedback'); });
+  $('#btn-enter').addEventListener('click', () => setView('translate'));
+  $('#btn-intro-settings').addEventListener('click', () => setView('settings'));
+  $$('[data-go]').forEach((button) => button.addEventListener('click', () => setView(button.dataset.go)));
+  $$('.mode').forEach((button) => button.addEventListener('click', () => setMode(button.dataset.mode)));
+  $('#target-language').addEventListener('change', async () => {
+    const target = $('#target-language').value;
+    $('#menu-target-language').value = target;
+    modeBaselines.clear();
+    setMode(mode);
+    if (config) config = await window.api.setConfig({ ...config, targetLanguage: target });
+  });
+  $('#custom-prompt').addEventListener('change', async () => {
+    if (!config) return;
+    config = await window.api.setConfig({ ...config, customPrompt: $('#custom-prompt').value.trim() });
+  });
+  $('#input').addEventListener('input', () => { $('#char-count').textContent = `${$('#input').value.length} / 5000`; });
+  $('#input').addEventListener('keydown', (event) => { if (event.key === 'Enter' && event.metaKey) { event.preventDefault(); run(); } });
+  $('#btn-run').addEventListener('click', run);
+  $('#btn-copy').addEventListener('click', async () => {
+    const text = extractPrimary(raw);
+    if (text) { await window.api.copy(text); $('#status').textContent = '已复制'; }
+  });
+  $('#btn-favorite').addEventListener('click', addFavorite);
+  $('#f-provider').addEventListener('change', () => {
+    $('#f-baseurl').dataset.autofill = '1'; $('#f-model').dataset.autofill = '1'; providerChanged();
+  });
+  $('#f-baseurl').addEventListener('input', () => { $('#f-baseurl').dataset.autofill = '0'; });
+  $('#f-model').addEventListener('input', () => { $('#f-model').dataset.autofill = '0'; });
+  $('#btn-save-settings').addEventListener('click', saveSettings);
+  $('#btn-export').addEventListener('click', async () => {
+    const result = await window.api.exportFavorites();
+    if (result?.ok) $('#btn-export').textContent = '已导出';
+  });
+  $('#favorites-list').addEventListener('click', async (event) => {
+    const button = event.target.closest('[data-delete]');
+    if (button) { await window.api.removeFavorite(button.dataset.delete); renderFavorites(); }
+  });
+  $('#source-list').addEventListener('click', (event) => {
+    const button = event.target.closest('[data-source]');
+    const item = button ? sources[Number(button.dataset.source)] : null;
+    if (item?.url) window.api.openExternal(item.url);
+  });
+  $('#btn-repository').addEventListener('click', () => window.api.openExternal(`https://github.com/${config.repository}`));
+  $('#btn-feedback').addEventListener('click', () => window.api.openExternal('mailto:xujianghao02@gmail.com?subject=Saybetter-A lingoisland%20Feedback'));
+}
+
+window.api.onView((view) => setView(view));
+window.api.onConfigChanged((next) => {
+  config = next;
+  if ($('#target-language')) $('#target-language').value = next.targetLanguage || 'en';
+  if ($('#menu-target-language')) $('#menu-target-language').value = next.targetLanguage || 'en';
+  if ($('#menu-appearance-label')) $('#menu-appearance-label').textContent = appearanceLabel(next.appearance);
 });
+window.api.onDelta((chunk) => {
+  if (runningBundle) {
+    bundleRaw += chunk;
+    raw = sectionForMode(bundleRaw, mode);
+  } else {
+    raw += chunk;
+  }
+  setRunning(false);
+  renderResult();
+  $('#result-actions').hidden = true;
+});
+window.api.onDone((payload) => {
+  sources = payload?.sources || [];
+  if (runningBundle) {
+    raw = sectionForMode(bundleRaw, mode);
+  } else if (mode === 'default') {
+    const key = `${$('#target-language').value}\n${$('#input').value.trim()}`;
+    modeBaselines.set(key, extractPrimary(raw, 'default'));
+  }
+  runningBundle = false;
+  setRunning(false);
+  renderResult();
+  renderSources();
+  $('#result-actions').hidden = !cleanOutput;
+  $('#status').textContent = mode === 'learning' && !sources.length ? '学习解析完成，未找到匹配来源' : '完成';
+});
+window.api.onError((message) => {
+  setRunning(false);
+  raw = `### 无法生成\n${message}`;
+  renderResult();
+  $('#result-actions').hidden = true;
+  $('#status').textContent = '请检查 API 设置';
+});
+window.api.onExportDone((result) => { if (result?.ok) $('#status').textContent = '收藏已导出'; });
 
 (async function init() {
-  const { config, presets: ps } = await window.api.getConfig();
-  presets = ps;
-  language = config.language || 'zh';
-  $('#f-language').value = language;
-  applyLanguage(language);
-  $('#f-provider').innerHTML = ps.map((p) => `<option value="${p.id}">${p.label}</option>`).join('');
-  $('#f-provider').value = config.providerId;
-  applyPreset(config.providerId);
-  $('#f-baseurl').value = config.baseUrl || '';
-  $('#f-model').value = config.model || '';
-  $('#f-key').value = config.apiKey || '';
-  $('#f-hotkey').value = config.hotkey || 'Alt+Space';
-  $('#f-watch').checked = config.watchClipboard !== false;
-  window.api.checkUpdate().then((r) => { if (r) paintUpdate(r); }).catch(() => {});
-  if (!externalViewRequested) showMain();
+  wireEvents();
+  config = await window.api.getConfig();
+  $('#version-line').textContent = `Version ${config.version}`;
+  $('#custom-prompt').value = config.customPrompt || '';
+  $('#target-language').value = config.targetLanguage || 'en';
+  $('#menu-target-language').value = config.targetLanguage || 'en';
+  $('#menu-appearance-label').textContent = appearanceLabel(config.appearance);
+  setMode(config.pillMode || 'default');
+  setView('intro');
 })();

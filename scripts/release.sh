@@ -6,8 +6,8 @@ cd "$(dirname "$0")/.."
 
 VERSION="${1:?用法: scripts/release.sh <版本号> [说明]}"
 NOTES="${2:-}"
-DMG="dist/SayBetter-${VERSION}-arm64.dmg"
-URL="https://github.com/eSeaFiller/saybetter/releases/download/v${VERSION}/SayBetter-${VERSION}-arm64.dmg"
+DMG="dist/Saybetter-A-lingoisland-${VERSION}-arm64.dmg"
+URL="https://github.com/eSeaFiller/saybetter/releases/download/v${VERSION}/Saybetter-A-lingoisland-${VERSION}-arm64.dmg"
 
 # 1) 写版本号
 node -e "
