@@ -22,14 +22,19 @@ for (const p of ['package.json', 'package-lock.json']) {
 # 2) 打包前自检：运行时要加载的文件必须都在 files 白名单里
 node -e "
 const fs=require('fs');
-const files=JSON.parse(fs.readFileSync('package.json')).build.files;
+const build=JSON.parse(fs.readFileSync('package.json')).build;
+const files=build.files;
+// 有些文件不走 files 白名单，而是 extraResources 单独拷进 Resources/（比如 native/bin 里的
+// Swift helper）—— 那也算「进了包」，不该在这里报缺失。
+const extra=(build.extraResources||[]).map(r=>typeof r==='string'?r:r.from);
 const need=new Set();
 for (const f of ['main.js','providers.js','updater.js','preload.js','preload-pill.js']) {
   const s=fs.readFileSync(f,'utf8');
   for (const m of s.matchAll(/__dirname, '([^']+)'/g)) need.add(m[1]);
   for (const m of s.matchAll(/require\('\.\/([^']+)'\)/g)) need.add(m[1].endsWith('.js')?m[1]:m[1]+'.js');
 }
-const missing=[...need].filter(n=>!files.includes(n) && !files.includes(n.split('/')[0]+'/**'));
+const covered=n=>files.includes(n)||files.includes(n.split('/')[0]+'/**')||extra.some(e=>e===n||e.startsWith(n+'/'));
+const missing=[...need].filter(n=>!covered(n));
 if (missing.length) { console.error('✗ 这些文件没进 files 白名单:', missing); process.exit(1); }
 console.log('✓ 打包白名单完整');
 "

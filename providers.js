@@ -3,8 +3,13 @@
 const PRESETS = [
   { id: 'openai', label: 'OpenAI', protocol: 'openai', baseUrl: 'https://api.openai.com/v1', models: ['gpt-4o-mini', 'gpt-4o'], keyHint: 'platform.openai.com' },
   { id: 'anthropic', label: 'Anthropic Claude', protocol: 'anthropic', baseUrl: 'https://api.anthropic.com', models: ['claude-sonnet-4-20250514', 'claude-3-5-haiku-latest'], keyHint: 'console.anthropic.com' },
-  { id: 'deepseek', label: 'DeepSeek', protocol: 'openai', baseUrl: 'https://api.deepseek.com/v1', models: ['deepseek-chat', 'deepseek-reasoner'], keyHint: 'platform.deepseek.com' },
-  { id: 'moonshot', label: 'Kimi', protocol: 'openai', baseUrl: 'https://api.moonshot.cn/v1', models: ['moonshot-v1-8k', 'moonshot-v1-32k'], keyHint: 'platform.moonshot.cn' },
+  // deepseek-chat / deepseek-reasoner 于 2026-07-24 下线，调用直接 404。
+  // v4 两个型号默认都开思考（effort 默认 high），不关的话思维链会把 max_tokens 吃光、正文为空。
+  { id: 'deepseek', label: 'DeepSeek', protocol: 'openai', baseUrl: 'https://api.deepseek.com/v1', models: ['deepseek-v4-flash', 'deepseek-v4-pro'], keyHint: 'platform.deepseek.com', noThink: { thinking: { type: 'disabled' } } },
+  // moonshot-v1 全系（含 kimi-k2 / k2.5）于 2026-08-31 前陆续下线，调用直接 404，别再填了。
+  // 现在的 Kimi 默认都开思考：k2.6 还能关掉（所以排第一个当默认），k3 关不掉，只能把
+  // reasoning_effort 压到 low —— 两个模型的开关名不一样，所以 noThink 这里写成函数。
+  { id: 'moonshot', label: 'Kimi', protocol: 'openai', baseUrl: 'https://api.moonshot.cn/v1', models: ['kimi-k2.6', 'kimi-k3'], keyHint: 'platform.kimi.com（原 platform.moonshot.cn，key 通用）', noThink: (model) => (/^kimi-k3/.test(model) ? { reasoning_effort: 'low' } : { thinking: { type: 'disabled' } }) },
   { id: 'qwen', label: '通义千问', protocol: 'openai', baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', models: ['qwen-plus', 'qwen-turbo', 'qwen-max'], keyHint: '阿里云百炼控制台', noThink: { enable_thinking: false } },
   { id: 'zhipu', label: '智谱 GLM', protocol: 'openai', baseUrl: 'https://open.bigmodel.cn/api/paas/v4', models: ['glm-4-plus', 'glm-4-flash'], keyHint: 'bigmodel.cn' },
   { id: 'ark', label: '豆包 / 火山方舟', protocol: 'openai', baseUrl: 'https://ark.cn-beijing.volces.com/api/v3', models: [], keyHint: '填写模型 ID 或接入点 ID', noThink: { thinking: { type: 'disabled' } } },
@@ -161,7 +166,7 @@ async function streamCheck({ config, text, tone = 'default', targetLanguage = 'e
       model,
       max_tokens: variant === 'pill-bundle' ? 3600 : tone === 'learning' ? 1800 : 1000,
       stream: true,
-      ...(preset.noThink || {}),
+      ...(typeof preset.noThink === 'function' ? preset.noThink(model) : preset.noThink || {}),
       messages: [{ role: 'system', content: system }, { role: 'user', content: text }],
     };
   }

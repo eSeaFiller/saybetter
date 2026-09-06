@@ -96,9 +96,23 @@ function decryptSecret(value) {
   } catch { return ''; }
 }
 
+// 服务商下线老模型后，老用户 config 里存的还是旧模型名，光更新 app 照样 404 —— 读配置时
+// 顺手换成该服务商当前的默认模型。只匹配确认已下线的型号，没把握的一律不动。
+const RETIRED_MODELS = {
+  moonshot: [/^moonshot-v1/, /^kimi-k2(-|$)/, /^kimi-k2\.5/, /^kimi-latest/, /^kimi-thinking-preview/],
+  deepseek: [/^deepseek-chat$/, /^deepseek-reasoner$/],
+};
+
+function migrateRetiredModel(config) {
+  const rules = RETIRED_MODELS[config.providerId];
+  if (!rules || !rules.some((re) => re.test(config.model || ''))) return config;
+  const replacement = (PRESETS.find((p) => p.id === config.providerId) || {}).models[0];
+  return replacement ? { ...config, model: replacement } : config;
+}
+
 function loadConfig() {
   const saved = readJSON(CONFIG_PATH(), {});
-  return { ...DEFAULT_CONFIG, ...saved, apiKey: decryptSecret(saved.apiKey || '') };
+  return migrateRetiredModel({ ...DEFAULT_CONFIG, ...saved, apiKey: decryptSecret(saved.apiKey || '') });
 }
 
 function saveConfig(next) {
