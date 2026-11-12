@@ -1,5 +1,5 @@
 {
-  "version": "0.8.2",
-  "url": "https://github.com/eSeaFiller/saybetter/releases/download/v0.8.2/Saybetter-A-lingoisland-0.8.2-arm64.dmg",
-  "notes": "修复 Kimi 与 DeepSeek 无法使用：两家旧模型名已下线，预设改为 kimi-k2.6 与 deepseek-v4-flash，旧配置自动迁移"
+  "version": "0.8.3",
+  "url": "https://github.com/eSeaFiller/saybetter/releases/download/v0.8.3/Saybetter-A-lingoisland-0.8.3-arm64.dmg",
+  "notes": "新增简体中文、英语和法语界面，可从窗口右上角切换，并同步到灵动岛。模型解释使用界面语言，翻译目标语言可独立选择。"
 }

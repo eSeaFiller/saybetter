@@ -1,6 +1,6 @@
 {
   "name": "saybetter-a-lingoisland",
-  "version": "0.8.2",
+  "version": "0.8.3",
   "description": "Saybetter-A lingoisland — 极简 macOS 菜单栏表达与学习助手",
   "main": "main.js",
   "scripts": {

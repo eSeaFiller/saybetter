@@ -2,8 +2,7 @@
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
-const MODE_NAMES = { default: '默认', formal: '专业', casual: '轻松', concise: '简洁', learning: '学习', custom: '自定义' };
-const TARGET_LANGUAGE_NAMES = { en: '英语', fr: '法语', de: '德语', ja: '日语' };
+const { t, setLanguage, setText, matchesHeading } = window.i18n;
 const STANDARD_MODES = new Set(['default', 'formal', 'casual', 'concise']);
 const BUNDLED_MODES = new Set(['default', 'formal', 'casual', 'concise', 'learning']);
 
@@ -146,9 +145,9 @@ function renderMarkdown(markdown) {
 
 function extractPrimary(markdown, selectedMode = mode) {
   const clean = String(markdown || '').replace(/<!--\s*NEWS_QUERY[\s\S]*?-->/gi, '').trim();
-  const targetHeading = selectedMode === 'learning' ? '自然表达' : selectedMode === 'custom' ? '' : '优化表达';
+  const targetHeading = selectedMode === 'learning' ? 'headingNatural' : selectedMode === 'custom' ? '' : 'headingRewrite';
   const sections = [...clean.matchAll(/^#{1,6}\s+(.+)\n([\s\S]*?)(?=^#{1,6}\s+|$)/gm)];
-  const target = targetHeading ? sections.find((match) => match[1].trim().includes(targetHeading)) : sections[0];
+  const target = targetHeading ? sections.find((match) => matchesHeading(match[1], targetHeading)) : sections[0];
   if (target) return target[2].replace(/^[-*•]\s+/gm, '').trim();
   const fallback = sections[0]?.[2] || clean;
   return fallback.replace(/^[-*•]\s+/gm, '').trim();
@@ -158,7 +157,6 @@ function setView(name) {
   $$('.view').forEach((view) => { view.hidden = view.id !== `view-${name}`; });
   if (name === 'settings') fillSettings();
   if (name === 'favorites') renderFavorites();
-  if (name === 'about' && config) $('#version-line').textContent = `Version ${config.version}`;
   if (name === 'translate') setTimeout(() => $('#input').focus(), 40);
 }
 
@@ -172,14 +170,24 @@ function setMode(next) {
   }
   $$('.mode').forEach((button) => button.classList.toggle('on', button.dataset.mode === next));
   $('#custom-prompt-panel').hidden = next !== 'custom';
-  const target = TARGET_LANGUAGE_NAMES[$('#target-language')?.value || config?.targetLanguage || 'en'] || '英语';
-  $('#empty-detail').textContent = next === 'learning'
-    ? `学习模式会拆解主谓宾，并检索可核验的${target}新闻标题原文。`
-    : next === 'custom'
-      ? `自定义模式会严格按你填写的 Prompt 处理，并默认输出${target}。`
-      : STANDARD_MODES.has(next) && next !== 'default'
-        ? `输出${target}；完成默认模式后，会用橙色标出相对默认表达变化的词汇。`
-        : `自动检测源语言并输出${target}。`;
+  renderModeDetail();
+}
+
+function renderModeDetail() {
+  const target = t(`language_${$('#target-language').value || 'en'}`);
+  const detail = mode === 'learning' || mode === 'custom' || mode === 'default' ? mode : 'compare';
+  $('#empty-detail').textContent = t(`detail_${detail}`, { target });
+}
+
+function applyInterfaceLanguage() {
+  setLanguage(config.language);
+  $('#interface-language').value = config.language;
+  $('#f-language').value = config.language;
+  $('#version-line').textContent = t('version', { version: config.version });
+  renderModeDetail();
+  if (!$('#source-section').hidden) renderSources();
+  if (!$('#view-favorites').hidden) renderFavorites();
+  if (!$('#view-settings').hidden) renderProviderLabels();
 }
 
 function setRunning(value) {
@@ -209,13 +217,13 @@ function renderSources() {
   if (mode !== 'learning') { section.hidden = true; return; }
   section.hidden = false;
   if (!sources.length) {
-    list.innerHTML = '<p class="source-empty">暂未找到足够匹配、可核验的公开新闻标题。自然表达仍可使用，但不会伪造出处。</p>';
+    list.innerHTML = `<p class="source-empty">${t('noNews')}</p>`;
     return;
   }
   list.innerHTML = sources.map((item, index) => `
     <button class="source-card" data-source="${index}">
       <strong>${escapeHTML(item.title)}</strong>
-      <small>${escapeHTML(item.source || '公开新闻来源')}${item.publishedAt ? ` · ${escapeHTML(new Date(item.publishedAt).toLocaleDateString())}` : ''}</small>
+      <small>${escapeHTML(item.source || t('newsSource'))}${item.publishedAt ? ` · ${escapeHTML(new Date(item.publishedAt).toLocaleDateString(document.documentElement.lang))}` : ''}</small>
     </button>`).join('');
 }
 
@@ -226,7 +234,7 @@ async function run() {
   const targetLanguage = $('#target-language').value;
   if (mode === 'custom' && !customPrompt) {
     $('#custom-prompt').focus();
-    $('#status').textContent = '请先填写自定义 Prompt';
+    setText($('#status'), 'customRequired');
     return;
   }
   bundleRaw = '';
@@ -235,12 +243,14 @@ async function run() {
   sources = [];
   runningBundle = BUNDLED_MODES.has(mode);
   $('#status').textContent = '';
+  delete $('#status').dataset.i18n;
   $('#source-section').hidden = true;
   setRunning(true);
-  $('#loading-text').textContent = mode === 'learning' ? '正在生成五种表达并拆解句式…' : '正在生成五种表达…';
+  setText($('#loading-text'), mode === 'learning' ? 'loadingLearning' : runningBundle ? 'loadingBundle' : 'loadingCustom');
   const result = await window.api.run(text, mode, customPrompt, targetLanguage, false, runningBundle);
-  if (!result?.ok && !result?.canceled) {
-    $('#status').textContent = result?.error || '请求失败';
+  if (!result?.ok && !result?.canceled && running) {
+    if (result?.error) $('#status').textContent = result.error;
+    else setText($('#status'), 'requestFailed');
     setRunning(false);
   }
 }
@@ -259,12 +269,21 @@ function providerChanged() {
     $('#f-model').value = preset.models[0];
     $('#f-model').dataset.autofill = '1';
   }
-  $('#provider-hint').textContent = preset.keyHint || '';
+  renderProviderLabels();
+}
+
+function renderProviderLabels() {
+  const select = $('#f-provider');
+  const selected = select.value || config.providerId;
+  select.replaceChildren(...config.presets.map((preset) => new Option(t(`provider_${preset.id}`, {}, preset.label), preset.id)));
+  select.value = selected;
+  const preset = config.presets.find((item) => item.id === selected);
+  $('#provider-hint').textContent = preset ? t(`hint_${preset.id}`, {}, preset.keyHint || '') : '';
 }
 
 function fillSettings() {
   if (!config) return;
-  $('#f-provider').innerHTML = config.presets.map((item) => `<option value="${escapeHTML(item.id)}">${escapeHTML(item.label)}</option>`).join('');
+  renderProviderLabels();
   $('#f-provider').value = config.providerId;
   $('#f-baseurl').value = config.baseUrl || (config.presets.find((item) => item.id === config.providerId)?.baseUrl || '');
   $('#f-model').value = config.model || '';
@@ -285,11 +304,10 @@ async function saveSettings() {
     apiKey: $('#f-key').value.trim(),
     language: $('#f-language').value,
     appearance: $('#f-appearance').value,
-    pillMode: config.pillMode || 'default',
-    targetLanguage: $('#target-language').value,
     customPrompt: $('#custom-prompt').value.trim(),
   });
-  $('#provider-hint').textContent = '已保存';
+  applyInterfaceLanguage();
+  $('#provider-hint').textContent = t('settingsSaved');
   setTimeout(() => setView('translate'), 350);
 }
 
@@ -297,15 +315,15 @@ async function renderFavorites() {
   const rows = await window.api.listFavorites();
   const list = $('#favorites-list');
   if (!rows.length) {
-    list.innerHTML = '<div class="no-favorites">还没有收藏。生成结果后点“收藏”即可加入。</div>';
+    list.innerHTML = `<div class="no-favorites">${t('noFavorites')}</div>`;
     return;
   }
   list.innerHTML = rows.map((item) => `
     <article class="favorite-card">
-      <div class="favorite-meta"><span>${escapeHTML(MODE_NAMES[item.mode] || item.mode)}</span><time>${escapeHTML(new Date(item.createdAt).toLocaleString())}</time></div>
+      <div class="favorite-meta"><span>${escapeHTML(t(`mode_${item.mode}`, {}, item.mode))}</span><time>${escapeHTML(new Date(item.createdAt).toLocaleString(document.documentElement.lang))}</time></div>
       <p class="favorite-output">${escapeHTML(item.output)}</p>
-      <p class="favorite-source">原文：${escapeHTML(item.source)}</p>
-      <div class="favorite-actions"><button class="delete-button" data-delete="${escapeHTML(item.id)}">删除</button></div>
+      <p class="favorite-source">${t('original')} · ${escapeHTML(item.source)}</p>
+      <div class="favorite-actions"><button class="delete-button" data-delete="${escapeHTML(item.id)}">${t('delete')}</button></div>
     </article>`).join('');
 }
 
@@ -313,9 +331,9 @@ async function addFavorite() {
   const output = extractPrimary(raw);
   if (!output) return;
   await window.api.addFavorite({ mode, source: $('#input').value.trim(), output, sources });
-  $('#status').textContent = '已收藏到本机';
-  $('#btn-favorite').textContent = '已收藏';
-  setTimeout(() => { $('#btn-favorite').textContent = '收藏'; }, 1100);
+  setText($('#status'), 'savedLocally');
+  setText($('#btn-favorite'), 'favoriteSaved');
+  setTimeout(() => { setText($('#btn-favorite'), 'favorite'); }, 1100);
 }
 
 function setMenuOpen(value) {
@@ -323,18 +341,22 @@ function setMenuOpen(value) {
   $('#btn-settings').classList.toggle('open', value);
 }
 
-function appearanceLabel(value) {
-  return ({ system: '跟随系统', light: '浅色', dark: '深色' })[value] || '跟随系统';
+function appearanceKey(value) {
+  return `appearance_${value || 'system'}`;
 }
 
 async function cycleAppearance() {
   const next = ({ system: 'light', light: 'dark', dark: 'system' })[config.appearance || 'system'];
-  config = await window.api.setConfig({ ...config, appearance: next, targetLanguage: $('#target-language').value });
-  $('#menu-appearance-label').textContent = appearanceLabel(config.appearance);
+  config = await window.api.setConfig({ appearance: next });
+  setText($('#menu-appearance-label'), appearanceKey(config.appearance));
   setMenuOpen(false);
 }
 
 function wireEvents() {
+  $('#interface-language').addEventListener('change', async () => {
+    config = await window.api.setConfig({ language: $('#interface-language').value });
+    applyInterfaceLanguage();
+  });
   $('#btn-settings').addEventListener('click', (event) => { event.stopPropagation(); setMenuOpen($('#app-menu').hidden); });
   $('#app-menu').addEventListener('click', (event) => event.stopPropagation());
   $('#menu-target-language').addEventListener('change', async () => {
@@ -342,7 +364,7 @@ function wireEvents() {
     $('#target-language').value = target;
     modeBaselines.clear();
     setMode(mode);
-    if (config) config = await window.api.setConfig({ ...config, targetLanguage: target });
+    if (config) config = await window.api.setConfig({ targetLanguage: target });
   });
   document.addEventListener('click', () => setMenuOpen(false));
   $$('[data-menu-view]').forEach((button) => button.addEventListener('click', () => { setMenuOpen(false); setView(button.dataset.menuView); }));
@@ -357,18 +379,18 @@ function wireEvents() {
     $('#menu-target-language').value = target;
     modeBaselines.clear();
     setMode(mode);
-    if (config) config = await window.api.setConfig({ ...config, targetLanguage: target });
+    if (config) config = await window.api.setConfig({ targetLanguage: target });
   });
   $('#custom-prompt').addEventListener('change', async () => {
     if (!config) return;
-    config = await window.api.setConfig({ ...config, customPrompt: $('#custom-prompt').value.trim() });
+    config = await window.api.setConfig({ customPrompt: $('#custom-prompt').value.trim() });
   });
   $('#input').addEventListener('input', () => { $('#char-count').textContent = `${$('#input').value.length} / 5000`; });
   $('#input').addEventListener('keydown', (event) => { if (event.key === 'Enter' && event.metaKey) { event.preventDefault(); run(); } });
   $('#btn-run').addEventListener('click', run);
   $('#btn-copy').addEventListener('click', async () => {
     const text = extractPrimary(raw);
-    if (text) { await window.api.copy(text); $('#status').textContent = '已复制'; }
+    if (text) { await window.api.copy(text); setText($('#status'), 'copied'); }
   });
   $('#btn-favorite').addEventListener('click', addFavorite);
   $('#f-provider').addEventListener('change', () => {
@@ -379,7 +401,7 @@ function wireEvents() {
   $('#btn-save-settings').addEventListener('click', saveSettings);
   $('#btn-export').addEventListener('click', async () => {
     const result = await window.api.exportFavorites();
-    if (result?.ok) $('#btn-export').textContent = '已导出';
+    if (result?.ok) setText($('#btn-export'), 'exported');
   });
   $('#favorites-list').addEventListener('click', async (event) => {
     const button = event.target.closest('[data-delete]');
@@ -396,10 +418,12 @@ function wireEvents() {
 
 window.api.onView((view) => setView(view));
 window.api.onConfigChanged((next) => {
+  const languageChanged = config?.language !== next.language;
   config = next;
+  if (languageChanged) applyInterfaceLanguage();
   if ($('#target-language')) $('#target-language').value = next.targetLanguage || 'en';
   if ($('#menu-target-language')) $('#menu-target-language').value = next.targetLanguage || 'en';
-  if ($('#menu-appearance-label')) $('#menu-appearance-label').textContent = appearanceLabel(next.appearance);
+  if ($('#menu-appearance-label')) setText($('#menu-appearance-label'), appearanceKey(next.appearance));
 });
 window.api.onDelta((chunk) => {
   if (runningBundle) {
@@ -425,25 +449,25 @@ window.api.onDone((payload) => {
   renderResult();
   renderSources();
   $('#result-actions').hidden = !cleanOutput;
-  $('#status').textContent = mode === 'learning' && !sources.length ? '学习解析完成，未找到匹配来源' : '完成';
+  setText($('#status'), mode === 'learning' && !sources.length ? 'learningDone' : 'done');
 });
 window.api.onError((message) => {
   setRunning(false);
-  raw = `### 无法生成\n${message}`;
+  raw = `### ${t('generationFailed')}\n${message}`;
   renderResult();
   $('#result-actions').hidden = true;
-  $('#status').textContent = '请检查 API 设置';
+  setText($('#status'), 'checkSettings');
 });
-window.api.onExportDone((result) => { if (result?.ok) $('#status').textContent = '收藏已导出'; });
+window.api.onExportDone((result) => { if (result?.ok) setText($('#status'), 'favoritesExported'); });
 
 (async function init() {
   wireEvents();
   config = await window.api.getConfig();
-  $('#version-line').textContent = `Version ${config.version}`;
+  applyInterfaceLanguage();
   $('#custom-prompt').value = config.customPrompt || '';
   $('#target-language').value = config.targetLanguage || 'en';
   $('#menu-target-language').value = config.targetLanguage || 'en';
-  $('#menu-appearance-label').textContent = appearanceLabel(config.appearance);
+  setText($('#menu-appearance-label'), appearanceKey(config.appearance));
   setMode(config.pillMode || 'default');
   setView('intro');
 })();

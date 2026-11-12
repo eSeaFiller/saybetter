@@ -77,7 +77,7 @@ test('creates one bundled clipboard request and keeps only the pill always-on-to
   assert.match(providers, /Produce FIVE complete views in one response/);
   assert.match(pill, /sectionForMode/);
   assert.match(pill, /const sections = \[\.\.\.clean\.matchAll\(marker\)\]/);
-  assert.match(pill, /正在生成该模式的结果/);
+  assert.match(pill, /t\('pendingMode'\)/);
   assert.doesNotMatch(main, /win\.setAlwaysOnTop\(true/);
   assert.match(main, /pillWin\.setAlwaysOnTop\(true/);
 });
@@ -172,9 +172,9 @@ test('release metadata and updater use the packaged DMG filename', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
   const latest = JSON.parse(fs.readFileSync(path.join(root, 'latest.json'), 'utf8'));
   const updater = fs.readFileSync(path.join(root, 'updater.js'), 'utf8');
-  assert.equal(pkg.version, '0.8.1');
   assert.equal(latest.version, pkg.version);
-  assert.match(latest.url, /Saybetter-A-lingoisland-0\.8\.1-arm64\.dmg$/);
+  const artifact = pkg.build.mac.artifactName.replace('${version}', pkg.version).replace('${arch}', 'arm64').replace('${ext}', 'dmg');
+  assert.equal(latest.url, `https://github.com/eSeaFiller/saybetter/releases/download/v${pkg.version}/${artifact}`);
   assert.match(updater, /Saybetter-A-lingoisland-\$\{version\}-arm64\.dmg/);
   assert.match(pkg.scripts.predist, /build:native/);
 });
@@ -186,7 +186,6 @@ test('uses the Saybetter-A lingoisland brand with an absolutely centered logo lo
   assert.match(html, /Saybetter-A lingoisland/);
   assert.match(html, /logo-l\.png/);
   assert.match(css, /\.logo img, \.about-mark img/);
-  assert.equal(pkg.version, '0.8.1');
   assert.equal(pkg.build.productName, 'Saybetter-A lingoisland');
   assert.equal(pkg.build.mac.artifactName, 'Saybetter-A-lingoisland-${version}-${arch}.${ext}');
 });
@@ -208,7 +207,7 @@ test('adds favorite action to the expanded pill result page', () => {
   assert.match(preload, /pill:favorite/);
   assert.match(pill, /window\.pill\.favorite/);
   assert.match(main, /ipcMain\.handle\('pill:favorite'/);
-  assert.match(pill, /已收藏到本机/);
+  assert.match(pill, /setText\(.*'savedLocally'\)/);
 });
 
 test('includes requested menu pages and packages the clipboard island', () => {
@@ -229,4 +228,17 @@ test('includes requested menu pages and packages the clipboard island', () => {
   assert.match(pillCss, /border-radius: 27px/);
   assert.ok(!pkg.build.files.includes('!renderer/pill.*'));
   assert.ok(pkg.build.files.includes('preload-pill.js'));
+});
+
+test('localizes generated headings without changing the target language or mode markers', () => {
+  const english = systemPrompt('en', 'formal', '', 'fr');
+  assert.match(english, /All explanations must be in English/);
+  assert.match(english, /### Suggested wording/);
+  assert.match(english, /copy-ready French version/);
+
+  const french = systemPrompt('fr', 'default', '', 'ja', 'pill-bundle');
+  assert.match(french, /All explanations and labels must be in French/);
+  assert.match(french, /## MODE:learning\n### Structure de la phrase/);
+  assert.match(french, /### Formulation naturelle\nOne copy-ready idiomatic Japanese sentence/);
+  assert.match(french, /<!-- NEWS_QUERY:the phrase -->/);
 });

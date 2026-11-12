@@ -2,6 +2,7 @@
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
+const { t, setLanguage, setText, matchesHeading } = window.i18n;
 const MODES = ['default', 'formal', 'casual', 'concise', 'learning'];
 const STANDARD_MODES = ['default', 'formal', 'casual', 'concise'];
 const LANGUAGE_BADGES = { en: 'EN', fr: 'FR', de: 'DE', ja: 'JA' };
@@ -99,10 +100,10 @@ function renderMarkdown(markdown) {
 }
 
 function extractPrimary(markdown, selectedMode = mode) {
-  const targetHeading = selectedMode === 'learning' ? '自然表达' : '优化表达';
+  const targetHeading = selectedMode === 'learning' ? 'headingNatural' : 'headingRewrite';
   const clean = String(markdown || '').replace(/<!--\s*NEWS_QUERY[\s\S]*?-->/gi, '');
   const matches = [...clean.matchAll(/^#{1,6}\s+(.+)\n([\s\S]*?)(?=^#{1,6}\s+|$)/gm)];
-  const target = matches.find((match) => match[1].includes(targetHeading)) || matches[0];
+  const target = matches.find((match) => matchesHeading(match[1], targetHeading)) || matches[0];
   return (target?.[2] || clean).replace(/^[-*•]\s+/gm, '').replace(/\[(?:SUBJECT|PREDICATE|OBJECT)\]|\[\/(?:SUBJECT|PREDICATE|OBJECT)\]/g, '').trim();
 }
 
@@ -126,14 +127,20 @@ function sectionForMode(markdown, selectedMode) {
 
 function paint() {
   raw = bundleRaw ? sectionForMode(bundleRaw, mode) : raw;
-  $('#output').innerHTML = raw ? renderMarkdown(raw) : '<p class="result-pending">正在生成该模式的结果…</p>';
-  $('#preview').textContent = extractPrimary(raw).replace(/\s+/g, ' ') || '正在生成…';
+  $('#output').innerHTML = raw ? renderMarkdown(raw) : `<p class="result-pending" data-i18n="pendingMode">${t('pendingMode')}</p>`;
+  const preview = extractPrimary(raw).replace(/\s+/g, ' ');
+  if (preview) {
+    delete $('#preview').dataset.i18n;
+    $('#preview').textContent = preview;
+  } else {
+    setText($('#preview'), 'working');
+  }
 }
 
 function setMode(next, notify = true) {
   if (!MODES.includes(next)) return;
   mode = next;
-  $('#btn-favorite').textContent = '收藏';
+  setText($('#btn-favorite'), 'favorite');
   $('#btn-favorite').classList.remove('saved');
   $$('.pill-mode').forEach((button) => button.classList.toggle('on', button.dataset.mode === next));
   if (bundleRaw) paint();
@@ -156,7 +163,7 @@ $('#btn-close').addEventListener('click', (event) => { event.stopPropagation(); 
 $('#btn-copy').addEventListener('click', (event) => {
   event.stopPropagation();
   const text = extractPrimary(raw);
-  if (text) { window.pill.copy(text); $('#status').textContent = '已复制'; }
+  if (text) { window.pill.copy(text); setText($('#status'), 'copied'); }
 });
 $('#btn-favorite').addEventListener('click', async (event) => {
   event.stopPropagation();
@@ -164,15 +171,16 @@ $('#btn-favorite').addEventListener('click', async (event) => {
   if (!output) return;
   await window.pill.favorite({ mode, source: sourceText, output, sources });
   const button = $('#btn-favorite');
-  button.textContent = '已收藏';
+  setText(button, 'favoriteSaved');
   button.classList.add('saved');
-  $('#status').textContent = '已收藏到本机';
+  setText($('#status'), 'savedLocally');
 });
 $$('.pill-mode').forEach((button) => button.addEventListener('click', (event) => {
   event.stopPropagation();
   setMode(button.dataset.mode);
 }));
 
+window.pill.onLanguage(setLanguage);
 window.pill.onExpanded((value) => {
   expanded = Boolean(value);
   $('#island').classList.toggle('expanded', expanded);
@@ -186,13 +194,13 @@ window.pill.onStart((payload) => {
   setMode(payload?.mode || 'default', false);
   $('#source').textContent = sourceText;
   $('#pill-language').textContent = `→ ${LANGUAGE_BADGES[payload?.targetLanguage] || 'EN'}`;
-  $('#preview').textContent = '正在生成…';
+  setText($('#preview'), 'working');
   $('#output').innerHTML = '';
   $('#pill-sources').hidden = true;
-  $('#status').textContent = '生成中…';
+  setText($('#status'), 'working');
   $('#btn-copy').disabled = true;
   $('#btn-favorite').disabled = true;
-  $('#btn-favorite').textContent = '收藏';
+  setText($('#btn-favorite'), 'favorite');
   $('#btn-favorite').classList.remove('saved');
   $('#dot').className = 'dot working';
 });
@@ -212,7 +220,7 @@ window.pill.onDone((payload) => {
   bundleRaw = payload?.output || bundleRaw;
   paint();
   $('#dot').className = 'dot';
-  $('#status').textContent = '完成';
+  setText($('#status'), 'done');
   $('#btn-copy').disabled = !extractPrimary(raw);
   $('#btn-favorite').disabled = !extractPrimary(raw);
   const sourceBox = $('#pill-sources');
@@ -220,10 +228,11 @@ window.pill.onDone((payload) => {
   sourceBox.innerHTML = sources.slice(0, 2).map((item) => `<button class="pill-source" title="${esc(item.source || '')}">${esc(item.title)}</button>`).join('');
 });
 window.pill.onError((message) => {
-  raw = `### 无法生成\n${message}`;
+  bundleRaw = '';
+  raw = `### ${t('generationFailed')}\n${message}`;
   paint();
   $('#dot').className = 'dot error';
-  $('#status').textContent = '请检查 API 设置';
+  setText($('#status'), 'checkSettings');
   $('#btn-copy').disabled = true;
   $('#btn-favorite').disabled = true;
 });

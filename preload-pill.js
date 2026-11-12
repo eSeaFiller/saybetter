@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('pill', {
   copy: (text) => ipcRenderer.send('pill:copy', text),
   favorite: (item) => ipcRenderer.invoke('pill:favorite', item),
   setMode: (mode, customPrompt = '') => ipcRenderer.send('pill:mode', { mode, customPrompt }),
+  onLanguage: (fn) => ipcRenderer.on('pill:language', (_event, language) => fn(language)),
   onStart: (fn) => ipcRenderer.on('pill:start', (_event, payload) => fn(payload)),
   onDelta: (fn) => ipcRenderer.on('pill:delta', (_event, chunk) => fn(chunk)),
   onDone: (fn) => ipcRenderer.on('pill:done', (_event, payload) => fn(payload || {})),

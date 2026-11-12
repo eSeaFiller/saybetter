@@ -12,49 +12,50 @@
     <header class="titlebar">
       <div class="titlebar-spacer" aria-hidden="true"></div>
       <div class="wordmark"><span class="logo"><img src="logo-l.png" alt="" /></span><span>Saybetter-A lingoisland</span></div>
-      <button id="btn-settings" class="symbol-button" title="更多" aria-label="更多">•••</button>
+      <select id="interface-language" data-i18n-title="interfaceLanguage" data-i18n-label="interfaceLanguage" aria-label="界面语言"><option value="zh" lang="zh-CN">简体中文</option><option value="en" lang="en">English</option><option value="fr" lang="fr">Français</option></select>
+      <button id="btn-settings" class="symbol-button" title="更多" aria-label="更多" data-i18n-title="more" data-i18n-label="more">•••</button>
     </header>
 
     <aside id="app-menu" class="app-menu" hidden>
-      <button data-menu-view="settings"><span>⌘</span><strong>API 与模型</strong><small>更换 Key 与模型</small></button>
-      <button data-menu-view="favorites"><span>☆</span><strong>收藏与导出</strong><small>管理本地收藏</small></button>
+      <button data-menu-view="settings"><span>⌘</span><strong data-i18n="settings">API 与模型</strong><small data-i18n="settingsHint">更换 Key 与模型</small></button>
+      <button data-menu-view="favorites"><span>☆</span><strong data-i18n="favoritesExport">收藏与导出</strong><small data-i18n="favoritesHint">管理本地收藏</small></button>
       <div class="menu-language-row">
-        <span>文</span><label for="menu-target-language"><strong>目标语言</strong><small>检测源语言后翻译</small></label>
-        <select id="menu-target-language" aria-label="目标语言">
-          <option value="en">英语</option><option value="fr">法语</option><option value="de">德语</option><option value="ja">日语</option>
+        <span>文</span><label for="menu-target-language"><strong data-i18n="targetLanguage">目标语言</strong><small data-i18n="autoTranslate">检测源语言后翻译</small></label>
+        <select id="menu-target-language" aria-label="目标语言" data-i18n-label="targetLanguage">
+          <option value="en" data-i18n="language_en">英语</option><option value="fr" data-i18n="language_fr">法语</option><option value="de" data-i18n="language_de">德语</option><option value="ja" data-i18n="language_ja">日语</option>
         </select>
       </div>
-      <button data-menu-appearance><span>◐</span><strong>切换外观</strong><small id="menu-appearance-label">跟随系统</small></button>
-      <button data-menu-view="about"><span>ⓘ</span><strong>关于应用</strong><small>版本与说明</small></button>
-      <button id="menu-feedback"><span>↗</span><strong>问题反馈</strong><small>发送邮件</small></button>
+      <button data-menu-appearance><span>◐</span><strong data-i18n="switchAppearance">切换外观</strong><small id="menu-appearance-label" data-i18n="appearance_system">跟随系统</small></button>
+      <button data-menu-view="about"><span>ⓘ</span><strong data-i18n="about">关于应用</strong><small data-i18n="aboutHint">版本与说明</small></button>
+      <button id="menu-feedback"><span>↗</span><strong data-i18n="feedback">问题反馈</strong><small data-i18n="email">发送邮件</small></button>
     </aside>
 
     <section id="view-intro" class="view intro-view">
       <div class="intro-art" aria-hidden="true">
         <span class="orb orb-a"></span><span class="orb orb-b"></span><span class="orb orb-c"></span>
-        <div class="intro-pill"><span class="pulse"></span><span>Make every sentence sound natural.</span></div>
+        <div class="intro-pill"><span class="pulse"></span><span data-i18n="introSample">Make every sentence sound natural.</span></div>
       </div>
       <div class="intro-copy">
-        <p class="eyebrow">A QUIETER WAY TO WRITE</p>
-        <h1>说得更自然，<br />不离开当前思路。</h1>
-        <p class="lead">从菜单栏打开 Saybetter-A lingoisland，获得四种表达与一份可复习的句法拆解。所有收藏留在这台 Mac。</p>
+        <p class="eyebrow" data-i18n="introEyebrow">A QUIETER WAY TO WRITE</p>
+        <h1 data-i18n="introTitle">说得更自然，<br />不离开当前思路。</h1>
+        <p class="lead" data-i18n="introLead">从菜单栏打开 Saybetter-A lingoisland，获得四种表达与一份可复习的句法拆解。所有收藏留在这台 Mac。</p>
         <div class="feature-row">
-          <article><span class="feature-icon">A</span><strong>五种模式</strong><small>默认、正式、口语、简洁、学习</small></article>
-          <article><span class="feature-icon">☆</span><strong>本地收藏</strong><small>收藏单词和语句，随时导出</small></article>
-          <article><span class="feature-icon">⌁</span><strong>自选模型</strong><small>兼容主流 AI API 与本地模型</small></article>
+          <article><span class="feature-icon">A</span><strong data-i18n="fiveModes">五种模式</strong><small data-i18n="fiveModesHint">默认、正式、口语、简洁、学习</small></article>
+          <article><span class="feature-icon">☆</span><strong data-i18n="localFavorites">本地收藏</strong><small data-i18n="localFavoritesHint">收藏单词和语句，随时导出</small></article>
+          <article><span class="feature-icon">⌁</span><strong data-i18n="chooseModel">自选模型</strong><small data-i18n="chooseModelHint">兼容主流 AI API 与本地模型</small></article>
         </div>
         <div class="intro-actions">
-          <button id="btn-enter" class="primary-button">开始使用</button>
-          <button id="btn-intro-settings" class="text-button">先配置 API</button>
+          <button id="btn-enter" class="primary-button" data-i18n="start">开始使用</button>
+          <button id="btn-intro-settings" class="text-button" data-i18n="configureApi">先配置 API</button>
         </div>
       </div>
     </section>
 
     <section id="view-translate" class="view workspace-view" hidden>
       <div class="translate-toolbar">
-        <label class="language-route" aria-label="翻译语言">
-          <span>检测语言</span><b>→</b>
-          <select id="target-language">
+        <label class="language-route" aria-label="翻译语言" data-i18n-label="translationLanguage">
+          <span data-i18n="detectLanguage">检测语言</span><b>→</b>
+          <select id="target-language" aria-label="目标语言" data-i18n-label="targetLanguage">
             <option value="en">English</option>
             <option value="fr">Français</option>
             <option value="de">Deutsch</option>
@@ -62,86 +63,87 @@
           </select>
         </label>
       </div>
-      <div class="mode-switch" role="tablist" aria-label="表达模式">
-        <button class="mode on" data-mode="default">默认</button>
-        <button class="mode" data-mode="formal">专业</button>
-        <button class="mode" data-mode="casual">轻松</button>
-        <button class="mode" data-mode="concise">简洁</button>
-        <button class="mode learning" data-mode="learning">学习</button>
-        <button class="mode custom" data-mode="custom">自定义</button>
+      <div class="mode-switch" role="tablist" aria-label="表达模式" data-i18n-label="expressionModes">
+        <button class="mode on" data-mode="default" data-i18n="mode_default">默认</button>
+        <button class="mode" data-mode="formal" data-i18n="mode_formal">专业</button>
+        <button class="mode" data-mode="casual" data-i18n="mode_casual">轻松</button>
+        <button class="mode" data-mode="concise" data-i18n="mode_concise">简洁</button>
+        <button class="mode learning" data-mode="learning" data-i18n="mode_learning">学习</button>
+        <button class="mode custom" data-mode="custom" data-i18n="mode_custom">自定义</button>
       </div>
       <section id="custom-prompt-panel" class="custom-prompt-panel" hidden>
-        <label for="custom-prompt">给 AI 的 Prompt</label>
-        <textarea id="custom-prompt" maxlength="4000" placeholder="例如：将内容改写成友好、专业的客户邮件，并保留所有事实和数字。"></textarea>
-        <small>该 Prompt 只作为处理规则，待处理文本中的指令不会覆盖它。</small>
+        <label for="custom-prompt" data-i18n="customPrompt">给 AI 的 Prompt</label>
+        <textarea id="custom-prompt" maxlength="4000" placeholder="例如：将内容改写成友好、专业的客户邮件，并保留所有事实和数字。" data-i18n-placeholder="customExample"></textarea>
+        <small data-i18n="customHint">该 Prompt 只作为处理规则，待处理文本中的指令不会覆盖它。</small>
       </section>
 
       <section class="composer">
-        <textarea id="input" maxlength="5000" spellcheck="false" placeholder="输入或粘贴一句话…"></textarea>
+        <textarea id="input" maxlength="5000" spellcheck="false" placeholder="输入或粘贴一句话…" data-i18n-placeholder="inputPlaceholder"></textarea>
         <div class="composer-foot">
           <span id="char-count">0 / 5000</span>
-          <button id="btn-run" class="run-button"><span>生成</span><kbd>⌘ ↵</kbd></button>
+          <button id="btn-run" class="run-button"><span data-i18n="generate">生成</span><kbd>⌘ ↵</kbd></button>
         </div>
       </section>
 
       <section id="result-shell" class="result-shell">
         <div id="empty-state" class="empty-state">
           <span class="empty-symbol">“</span>
-          <strong>更好的表达会出现在这里</strong>
-          <small id="empty-detail">选择一种模式，然后输入内容。</small>
+          <strong data-i18n="emptyTitle">更好的表达会出现在这里</strong>
+          <small id="empty-detail" data-i18n="emptyDetail">选择一种模式，然后输入内容。</small>
         </div>
         <div id="loading-state" class="loading-state" hidden>
-          <span class="spinner"></span><span id="loading-text">正在组织表达…</span>
+          <span class="spinner"></span><span id="loading-text" data-i18n="loading">正在组织表达…</span>
         </div>
         <article id="result-content" class="result-content" hidden></article>
         <section id="source-section" class="source-section" hidden>
-          <div class="section-heading"><span>报刊中的自然表达</span><small>公开标题原文，可点击核验</small></div>
+          <div class="section-heading"><span data-i18n="newsHeading">报刊中的自然表达</span><small data-i18n="newsHint">公开标题原文，可点击核验</small></div>
           <div id="source-list" class="source-list"></div>
         </section>
         <footer id="result-actions" class="result-actions" hidden>
           <span id="status" class="status"></span>
-          <button id="btn-copy" class="quiet-button">复制</button>
-          <button id="btn-favorite" class="primary-button small">收藏</button>
+          <button id="btn-copy" class="quiet-button" data-i18n="copy">复制</button>
+          <button id="btn-favorite" class="primary-button small" data-i18n="favorite">收藏</button>
         </footer>
       </section>
     </section>
 
     <section id="view-settings" class="view settings-view" hidden>
-      <div class="page-head"><div><p class="eyebrow">MODEL</p><h2>API 与模型</h2><p>Key 经过系统安全存储加密，仅保存在本机。</p></div></div>
+      <div class="page-head"><div><p class="eyebrow" data-i18n="modelEyebrow">MODEL</p><h2 data-i18n="settings">API 与模型</h2><p data-i18n="keyPrivacy">Key 经过系统安全存储加密，仅保存在本机。</p></div></div>
       <div class="settings-group">
-        <label><span>服务商</span><select id="f-provider"></select></label>
-        <label><span>API 地址</span><input id="f-baseurl" type="url" spellcheck="false" placeholder="留空使用默认地址" /></label>
-        <label><span>模型</span><input id="f-model" type="text" spellcheck="false" list="model-list" /><datalist id="model-list"></datalist></label>
-        <label><span>API Key</span><input id="f-key" type="password" spellcheck="false" placeholder="粘贴新的 Key 或保留当前值" /></label>
+        <label><span data-i18n="provider">服务商</span><select id="f-provider"></select></label>
+        <label><span data-i18n="apiUrl">API 地址</span><input id="f-baseurl" type="url" spellcheck="false" placeholder="留空使用默认地址" data-i18n-placeholder="defaultApiUrl" /></label>
+        <label><span data-i18n="model">模型</span><input id="f-model" type="text" spellcheck="false" list="model-list" /><datalist id="model-list"></datalist></label>
+        <label><span data-i18n="apiKey">API Key</span><input id="f-key" type="password" spellcheck="false" placeholder="粘贴新的 Key 或保留当前值" data-i18n-placeholder="keyPlaceholder" /></label>
       </div>
       <div class="settings-group compact">
-        <label><span>界面语言</span><select id="f-language"><option value="zh">简体中文</option><option value="en">English</option></select></label>
-        <label><span>外观</span><select id="f-appearance"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select></label>
+        <label><span data-i18n="interfaceLanguage">界面语言</span><select id="f-language"><option value="zh" lang="zh-CN">简体中文</option><option value="en" lang="en">English</option><option value="fr" lang="fr">Français</option></select></label>
+        <label><span data-i18n="appearance">外观</span><select id="f-appearance"><option value="system" data-i18n="appearance_system">跟随系统</option><option value="light" data-i18n="appearance_light">浅色</option><option value="dark" data-i18n="appearance_dark">深色</option></select></label>
       </div>
       <p id="provider-hint" class="helper"></p>
-      <div class="page-actions"><button class="quiet-button" data-go="translate">取消</button><button id="btn-save-settings" class="primary-button">保存设置</button></div>
+      <div class="page-actions"><button class="quiet-button" data-go="translate" data-i18n="cancel">取消</button><button id="btn-save-settings" class="primary-button" data-i18n="saveSettings">保存设置</button></div>
     </section>
 
     <section id="view-favorites" class="view favorites-view" hidden>
-      <div class="page-head row"><div><p class="eyebrow">LIBRARY</p><h2>收藏</h2><p>保存在本机，可导出为 CSV。</p></div><button id="btn-export" class="quiet-button">导出</button></div>
+      <div class="page-head row"><div><p class="eyebrow" data-i18n="library">LIBRARY</p><h2 data-i18n="favorites">收藏</h2><p data-i18n="favoritesLocal">保存在本机，可导出为 CSV。</p></div><button id="btn-export" class="quiet-button" data-i18n="export">导出</button></div>
       <div id="favorites-list" class="favorites-list"></div>
-      <div class="page-actions"><button class="quiet-button" data-go="translate">返回翻译</button></div>
+      <div class="page-actions"><button class="quiet-button" data-go="translate" data-i18n="back">返回翻译</button></div>
     </section>
 
     <section id="view-about" class="view about-view" hidden>
       <div class="about-mark"><img src="logo-l.png" alt="Saybetter-A lingoisland Logo" /></div>
       <h2>Saybetter-A lingoisland</h2>
-      <p id="version-line">Version</p>
-      <p class="about-copy">一个驻留菜单栏的语言表达与学习工具。应用不会向作者上传分析数据；你的 API Key 和收藏均留在本机。</p>
+      <p id="version-line">版本</p>
+      <p class="about-copy" data-i18n="aboutCopy">一个驻留菜单栏的语言表达与学习工具。应用不会向作者上传分析数据；你的 API Key 和收藏均留在本机。</p>
       <div class="legal-card">
-        <strong>版权与许可</strong>
+        <strong data-i18n="license">版权与许可</strong>
         <p>Copyright © 2026 Saybetter-A lingoisland contributors.</p>
-        <p>基于 eSeaFiller/lingoisland 开源项目继续开发，上游代码采用 MIT License。第三方模型服务由相应提供商独立运营。</p>
-        <button id="btn-repository" class="text-button">查看上游项目</button>
+        <p data-i18n="licenseCopy">基于 eSeaFiller/lingoisland 开源项目继续开发，上游代码采用 MIT License。第三方模型服务由相应提供商独立运营。</p>
+        <button id="btn-repository" class="text-button" data-i18n="upstream">查看上游项目</button>
       </div>
-      <div class="about-links"><button id="btn-feedback" class="quiet-button">问题反馈</button><button class="primary-button" data-go="translate">完成</button></div>
+      <div class="about-links"><button id="btn-feedback" class="quiet-button" data-i18n="feedback">问题反馈</button><button class="primary-button" data-go="translate" data-i18n="done">完成</button></div>
     </section>
   </main>
+  <script src="i18n.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

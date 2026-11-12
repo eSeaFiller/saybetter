@@ -14,32 +14,33 @@
       <span id="pill-language" class="language">→ EN</span>
       <span id="preview" class="preview"></span>
       <span id="dot" class="dot working"></span>
-      <button id="btn-close" class="icon-button" title="关闭">×</button>
+      <button id="btn-close" class="icon-button" title="关闭" data-i18n-title="close">×</button>
     </header>
-    <nav id="pill-modes" class="pill-modes" aria-label="表达模式">
-      <button class="pill-mode on" data-mode="default">默认</button>
-      <button class="pill-mode" data-mode="formal">正式</button>
-      <button class="pill-mode" data-mode="casual">口语</button>
-      <button class="pill-mode" data-mode="concise">简洁</button>
-      <button class="pill-mode" data-mode="learning">学习</button>
+    <nav id="pill-modes" class="pill-modes" aria-label="表达模式" data-i18n-label="expressionModes">
+      <button class="pill-mode on" data-mode="default" data-i18n="mode_default">默认</button>
+      <button class="pill-mode" data-mode="formal" data-i18n="mode_formal">正式</button>
+      <button class="pill-mode" data-mode="casual" data-i18n="mode_casual">口语</button>
+      <button class="pill-mode" data-mode="concise" data-i18n="mode_concise">简洁</button>
+      <button class="pill-mode" data-mode="learning" data-i18n="mode_learning">学习</button>
     </nav>
     <section id="pill-custom" class="pill-custom" hidden>
-      <textarea id="pill-custom-prompt" maxlength="4000" placeholder="输入你的 AI Prompt…"></textarea>
-      <button id="btn-apply-custom">应用</button>
+      <textarea id="pill-custom-prompt" maxlength="4000" placeholder="输入你的 AI Prompt…" data-i18n-placeholder="promptPlaceholder"></textarea>
+      <button id="btn-apply-custom" data-i18n="apply">应用</button>
     </section>
     <section class="island-body">
       <p id="source" class="source"></p>
       <article id="output" class="output"></article>
       <section id="pill-sources" class="pill-sources" hidden></section>
       <footer>
-        <span id="status">生成中…</span>
+        <span id="status" data-i18n="working">生成中…</span>
         <div class="result-buttons">
-          <button id="btn-favorite" class="favorite-button" disabled>收藏</button>
-          <button id="btn-copy" class="copy-button">复制结果</button>
+          <button id="btn-favorite" class="favorite-button" disabled data-i18n="favorite">收藏</button>
+          <button id="btn-copy" class="copy-button" data-i18n="copyResult">复制结果</button>
         </div>
       </footer>
     </section>
   </main>
+  <script src="i18n.js"></script>
   <script src="pill.js"></script>
 </body>
 </html>

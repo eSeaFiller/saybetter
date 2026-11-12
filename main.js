@@ -17,6 +17,7 @@ const {
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
+const { normalizeLanguage, translate } = require('./renderer/i18n');
 const { PRESETS, streamCheck } = require('./providers');
 const { checkForUpdate, CHECK_INTERVAL_MS, REPO } = require('./updater');
 
@@ -112,17 +113,18 @@ function migrateRetiredModel(config) {
 
 function loadConfig() {
   const saved = readJSON(CONFIG_PATH(), {});
-  return migrateRetiredModel({ ...DEFAULT_CONFIG, ...saved, apiKey: decryptSecret(saved.apiKey || '') });
+  return migrateRetiredModel({ ...DEFAULT_CONFIG, ...saved, language: normalizeLanguage(saved.language), apiKey: decryptSecret(saved.apiKey || '') });
 }
 
 function saveConfig(next) {
+  const previousLanguage = loadConfig().language;
   const clean = {
     ...DEFAULT_CONFIG,
     providerId: String(next.providerId || DEFAULT_CONFIG.providerId),
     baseUrl: String(next.baseUrl || '').trim(),
     model: String(next.model || '').trim(),
     apiKey: encryptSecret(String(next.apiKey || '').trim()),
-    language: PRESETS.length && String(next.language || 'zh'),
+    language: normalizeLanguage(next.language),
     appearance: ['system', 'light', 'dark'].includes(next.appearance) ? next.appearance : 'system',
     watchClipboard: next.watchClipboard !== false,
     pillMode: ['default', 'formal', 'casual', 'concise', 'learning', 'custom'].includes(next.pillMode) ? next.pillMode : 'default',
@@ -131,6 +133,7 @@ function saveConfig(next) {
   };
   writeJSON(CONFIG_PATH(), clean);
   nativeTheme.themeSource = clean.appearance;
+  if (clean.language !== previousLanguage) pillSend('pill:language', clean.language);
   buildTrayMenu();
   applyClipboardWatch(loadConfig());
   return loadConfig();
@@ -164,7 +167,7 @@ function csvCell(value) {
 async function exportFavorites() {
   const rows = loadFavorites();
   const result = await dialog.showSaveDialog(win, {
-    title: '导出收藏',
+    title: translate(loadConfig().language, 'exportFavorites'),
     defaultPath: path.join(app.getPath('downloads'), `Saybetter-A lingoisland-Favorites-${new Date().toISOString().slice(0, 10)}.csv`),
     filters: [{ name: 'CSV', extensions: ['csv'] }],
   });
@@ -365,6 +368,7 @@ function createPill() {
     keepPillVisible();
     positionPill(PILL_WIDTH, PILL_HEIGHT);
     pillSend('pill:expanded', false);
+    pillSend('pill:language', loadConfig().language);
   });
   pillWin.loadFile(path.join(__dirname, 'renderer', 'pill.html'));
 }
@@ -479,7 +483,7 @@ async function runInPill(text, requestedMode) {
     pillBundleSources = await searchNewsExamples(queryMatch ? queryMatch[1].trim() : text, config.targetLanguage || 'en');
     if (!controller.signal.aborted) pillSend('pill:done', { sources: pillBundleSources, output });
   } catch (error) {
-    if (!controller.signal.aborted) pillSend('pill:error', error?.message || '生成失败');
+    if (!controller.signal.aborted) pillSend('pill:error', error?.message || translate(config.language, 'generationFailed'));
   } finally {
     if (pillAbort === controller) pillAbort = null;
   }
@@ -648,7 +652,10 @@ function createTray() {
 }
 
 ipcMain.handle('config:get', () => publicConfig());
-ipcMain.handle('config:set', (_event, config) => publicConfig(saveConfig(config)));
+ipcMain.handle('config:set', (_event, changes) => {
+  saveConfig({ ...loadConfig(), ...changes });
+  return publicConfig();
+});
 ipcMain.handle('window:hide', () => win?.hide());
 ipcMain.handle('window:minimize', () => win?.minimize());
 ipcMain.handle('clipboard:write', (_event, text) => {
@@ -670,11 +677,11 @@ ipcMain.handle('check:run', async (_event, payload) => {
   const targetLanguage = ['en', 'fr', 'de', 'ja'].includes(payload?.targetLanguage) ? payload.targetLanguage : 'en';
   const silent = payload?.silent === true;
   const bundle = payload?.bundle === true;
-  if (!text) return { ok: false, error: '请输入要处理的内容' };
+  const config = loadConfig();
+  if (!text) return { ok: false, error: translate(config.language, 'textRequired') };
   currentAbort?.abort();
   const controller = new AbortController();
   currentAbort = controller;
-  const config = loadConfig();
   try {
     const output = await streamCheck({
       config,
@@ -693,7 +700,7 @@ ipcMain.handle('check:run', async (_event, payload) => {
     return { ok: true, sources, output };
   } catch (error) {
     if (controller.signal.aborted) return { ok: false, canceled: true };
-    const message = error?.message || '请求失败';
+    const message = error?.message || translate(config.language, 'requestFailed');
     if (!silent) win?.webContents.send('check:error', message);
     return { ok: false, error: message };
   } finally {

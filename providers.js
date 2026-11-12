@@ -1,5 +1,7 @@
 'use strict';
 
+const { translate, normalizeLanguage } = require('./renderer/i18n');
+
 const PRESETS = [
   { id: 'openai', label: 'OpenAI', protocol: 'openai', baseUrl: 'https://api.openai.com/v1', models: ['gpt-4o-mini', 'gpt-4o'], keyHint: 'platform.openai.com' },
   { id: 'anthropic', label: 'Anthropic Claude', protocol: 'anthropic', baseUrl: 'https://api.anthropic.com', models: ['claude-sonnet-4-20250514', 'claude-3-5-haiku-latest'], keyHint: 'console.anthropic.com' },
@@ -17,7 +19,7 @@ const PRESETS = [
   { id: 'custom', label: '自定义 OpenAI 兼容接口', protocol: 'openai', baseUrl: '', models: [], keyHint: '填写以 /v1 结尾的 Base URL' },
 ];
 
-const LANGUAGE_NAMES = { zh: '简体中文', en: 'English', vi: 'Tiếng Việt', id: 'Bahasa Indonesia', th: 'ไทย', ms: 'Bahasa Melayu' };
+const LANGUAGE_NAMES = { zh: '简体中文', en: 'English', fr: 'French' };
 const TARGET_LANGUAGES = {
   en: { name: 'English', news: 'English-language' },
   fr: { name: 'French', news: 'French-language' },
@@ -32,102 +34,105 @@ const MODE_HINTS = {
 };
 
 function buildPillBundlePrompt(language, targetLanguage = 'en') {
-  const explanationLanguage = LANGUAGE_NAMES[language] || LANGUAGE_NAMES.zh;
+  const label = (key) => translate(language, key);
+  const explanationLanguage = LANGUAGE_NAMES[normalizeLanguage(language)];
   const target = TARGET_LANGUAGES[targetLanguage] || TARGET_LANGUAGES.en;
   return `You are a precise language assistant. Detect the source language automatically. Produce FIVE complete views in one response. Translate into ${target.name}, or improve it in ${target.name} if already written in that language. Preserve every fact and never add meaning.
 All explanations and labels must be in ${explanationLanguage}. Follow this exact Markdown structure and do not add a preamble. Each MODE delimiter must appear alone on its own line exactly as written; never combine a MODE delimiter with a section heading or answer text:
 
 ## MODE:default
-### 优化表达
+### ${label('headingRewrite')}
 One copy-ready ${target.name} version closest to the original tone and politeness.
-### 修改说明
+### ${label('headingChanges')}
 1–3 short bullets.
 
 ## MODE:formal
-### 优化表达
+### ${label('headingRewrite')}
 One copy-ready polished professional ${target.name} version suitable for a client or senior colleague.
-### 修改说明
+### ${label('headingChanges')}
 1–3 short bullets.
 
 ## MODE:casual
-### 优化表达
+### ${label('headingRewrite')}
 One copy-ready relaxed natural ${target.name} version suitable for a teammate.
-### 修改说明
+### ${label('headingChanges')}
 1–3 short bullets.
 
 ## MODE:concise
-### 优化表达
+### ${label('headingRewrite')}
 One copy-ready concise ${target.name} version preserving the full meaning.
-### 修改说明
+### ${label('headingChanges')}
 1–3 short bullets.
 
 ## MODE:learning
-### 句子骨架
+### ${label('headingGrammar')}
 Analyze the FINAL ${target.name} sentence below. Quote every grammatical span in ${target.name}:
-- **主语（Subject）**：exact target-language subject, or “省略/隐含”
-- **谓语（Predicate）**：exact target-language predicate
-- **宾语（Object）**：exact target-language object, or “无”
-- **补充成分**：exact target-language complement/modifier, or “无”
-### 彩色结构
+- **${label('subject')}**: exact target-language subject, or “${label('implied')}”
+- **${label('predicate')}**: exact target-language predicate
+- **${label('object')}**: exact target-language object, or “${label('none')}”
+- **${label('complement')}**: exact target-language complement/modifier, or “${label('none')}”
+### ${label('headingColor')}
 Write the final ${target.name} sentence once and wrap its target-language spans with [SUBJECT]...[/SUBJECT], [PREDICATE]...[/PREDICATE], and [OBJECT]...[/OBJECT]. Never mark the source-language sentence.
-### 自然表达
+### ${label('headingNatural')}
 One copy-ready idiomatic ${target.name} sentence.
-### 为什么自然
+### ${label('headingWhy')}
 2–4 short bullets.
-### 报刊检索词
+### ${label('headingNews')}
 One short ${target.name} phrase, 2–7 words. End with exactly: <!-- NEWS_QUERY:the phrase -->`;
 }
 function buildLearningPrompt(language, targetLanguage = 'en') {
-  const explanationLanguage = LANGUAGE_NAMES[language] || LANGUAGE_NAMES.zh;
+  const label = (key) => translate(language, key);
+  const explanationLanguage = LANGUAGE_NAMES[normalizeLanguage(language)];
   const target = TARGET_LANGUAGES[targetLanguage] || TARGET_LANGUAGES.en;
   return `You are a ${target.name} language tutor. Detect the user's source language automatically. First translate or improve it into natural ${target.name}; then analyze that TARGET-LANGUAGE sentence for learning.
 All explanations and labels must be in ${explanationLanguage}. Examples, quoted grammatical spans, the colored structure sentence, and copy-ready output must all use the final ${target.name} sentence—not the source-language input.
 
 Return exactly these Markdown sections:
-### 句子骨架
-- **主语（Subject）**：quote the exact subject from the final ${target.name} sentence, or “省略/隐含” and explain briefly
-- **谓语（Predicate）**：quote the exact predicate from the final ${target.name} sentence and explain tense/voice briefly
-- **宾语（Object）**：quote the exact object from the final ${target.name} sentence, or “无” and explain briefly
-- **补充成分**：list complement, modifier, adverbial, clause from the final ${target.name} sentence, or “无”
+### ${label('headingGrammar')}
+- **${label('subject')}**: quote the exact subject from the final ${target.name} sentence, or “${label('implied')}” and explain briefly
+- **${label('predicate')}**: quote the exact predicate from the final ${target.name} sentence and explain tense/voice briefly
+- **${label('object')}**: quote the exact object from the final ${target.name} sentence, or “${label('none')}” and explain briefly
+- **${label('complement')}**: list complement, modifier, adverbial, clause from the final ${target.name} sentence, or “${label('none')}”
 
-### 彩色结构
+### ${label('headingColor')}
 Write the final ${target.name} sentence exactly once, wrapping only its grammatical spans with these literal markers: [SUBJECT]...[/SUBJECT] for the subject, [PREDICATE]...[/PREDICATE] for the predicate, [OBJECT]...[/OBJECT] for the object. Keep all other words unwrapped. Do not use the source-language sentence here. Do not overlap markers and do not use HTML.
 
-### 结构路径
-Write one compact line in this format: 主语 → 谓语 → 宾语 → 补充成分. Keep the original words in each node.
+### ${label('headingPath')}
+Write one compact line in this format: ${label('subject')} → ${label('predicate')} → ${label('object')} → ${label('complement')}. Keep the original words in each node.
 
-### 自然表达
+### ${label('headingNatural')}
 Write one copy-ready, idiomatic ${target.name} sentence. Translate faithfully into ${target.name} unless the input is already ${target.name}, in which case correct and improve it. Do not add meaning.
 
-### 为什么自然
+### ${label('headingWhy')}
 Give 2–4 short bullets about grammar, collocation, register, or rhythm.
 
-### 报刊检索词
+### ${label('headingNews')}
 Write one short phrase in ${target.name}, 2–7 words, suitable for finding the same construction in reputable ${target.news} news. Do not claim or invent any citation. End with an HTML comment exactly like: <!-- NEWS_QUERY:the phrase -->`;
 }
 
 function buildStandardPrompt(language, tone, targetLanguage = 'en') {
-  const explanationLanguage = LANGUAGE_NAMES[language] || LANGUAGE_NAMES.zh;
+  const label = (key) => translate(language, key);
+  const explanationLanguage = LANGUAGE_NAMES[normalizeLanguage(language)];
   const target = TARGET_LANGUAGES[targetLanguage] || TARGET_LANGUAGES.en;
   const hint = MODE_HINTS[tone] || MODE_HINTS.default;
   return `You are a precise language assistant. Detect the user's source language automatically. If the text is not ${target.name}, translate it into natural ${target.name}. If it is already ${target.name}, correct and improve it in ${target.name}. Preserve meaning and do not add facts.
 ${hint}
 All explanations must be in ${explanationLanguage}. Return exactly:
-### 优化表达
+### ${label('headingRewrite')}
 One copy-ready ${target.name} version, with no quotation marks.
 
-### 修改说明
+### ${label('headingChanges')}
 Give 1–4 short bullets. Use ~~original~~ → **replacement** when something changed. If no correction is needed, explain why the original works.
 
-### 使用场景
+### ${label('headingContext')}
 One short sentence describing the best context and register for this wording.`;
 }
 
 function buildCustomPrompt(language, customPrompt, targetLanguage = 'en') {
-  const explanationLanguage = LANGUAGE_NAMES[language] || LANGUAGE_NAMES.zh;
+  const explanationLanguage = LANGUAGE_NAMES[normalizeLanguage(language)];
   const target = TARGET_LANGUAGES[targetLanguage] || TARGET_LANGUAGES.en;
   const instruction = String(customPrompt || '').trim();
-  if (!instruction) throw new Error('请先填写自定义模式 Prompt');
+  if (!instruction) throw new Error(translate(language, 'customRequired'));
   return `You are a language assistant following the user's custom transformation instructions below.
 CUSTOM INSTRUCTIONS:
 ${instruction}
@@ -147,9 +152,9 @@ async function streamCheck({ config, text, tone = 'default', targetLanguage = 'e
   const baseUrl = String(config.baseUrl || preset.baseUrl || '').replace(/\/+$/, '');
   const model = String(config.model || '').trim();
   const apiKey = String(config.apiKey || '').trim();
-  if (!baseUrl) throw new Error('请填写 API 地址');
-  if (!model) throw new Error('请填写模型名称');
-  if (!apiKey && preset.id !== 'ollama') throw new Error('请填写 API Key');
+  if (!baseUrl) throw new Error(translate(config.language, 'urlRequired'));
+  if (!model) throw new Error(translate(config.language, 'modelRequired'));
+  if (!apiKey && preset.id !== 'ollama') throw new Error(translate(config.language, 'keyRequired'));
 
   const system = systemPrompt(config.language, tone, customPrompt, targetLanguage, variant);
   let url;
@@ -176,7 +181,7 @@ async function streamCheck({ config, text, tone = 'default', targetLanguage = 'e
     const detail = await response.text().catch(() => '');
     throw new Error(`${response.status} ${response.statusText}${detail ? ` — ${detail.slice(0, 240)}` : ''}`);
   }
-  if (!response.body) throw new Error('服务商未返回可读取的响应');
+  if (!response.body) throw new Error(translate(config.language, 'responseMissing'));
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
@@ -206,7 +211,7 @@ async function streamCheck({ config, text, tone = 'default', targetLanguage = 'e
     blocks.forEach(consume);
   }
   if (buffer.trim()) consume(buffer);
-  if (!output.trim()) throw new Error('模型返回了空内容，请尝试关闭思考模式或更换模型');
+  if (!output.trim()) throw new Error(translate(config.language, 'outputEmpty'));
   return output;
 }
 
